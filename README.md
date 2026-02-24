@@ -30,7 +30,7 @@ There is a **Diagnostics** button in the app that collects device info, register
 - **Start at login** — when running as Administrator, creates a Windows scheduled task that launches the app at login with elevated privileges and no UAC prompt; when running without admin, creates a standard startup shortcut (note: Windows Defender may also flag the scheduled task creation — see [Windows Defender](#pre-built-exe-windows) note above)
 - **`--apply-quit` mode** — apply the startup preset and exit immediately (saves RAM for always-on setups)
 - **Diagnostics** — collect system info, USB HID enumeration, SMBus scan, device register dumps, and config files into a zip for troubleshooting
-- **Cross-platform** — runs on Windows (PawnIO driver) and Linux (smbus2)
+- **Cross-platform** — runs on Windows (PawnIO driver) and Linux (smbus2); Linux support is untested
 - **Single instance** — prevents duplicate instances with a friendly notification
 
 ## Installation
