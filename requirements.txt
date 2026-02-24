@@ -1,0 +1,6 @@
+customtkinter>=5.2.0
+CTkColorPicker>=0.9.0
+hidapi>=0.14.0
+pystray>=0.19.0
+Pillow>=9.0.0
+smbus2>=0.4.0; sys_platform == "linux"
