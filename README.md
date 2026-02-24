@@ -42,6 +42,8 @@ Download `frugalRGB.zip` from the [Releases](../../releases) page, extract it, a
 - For **motherboard RGB only** (ASRock Polychrome USB): no admin required.
 - For **RAM RGB** (DDR5 via SMBus): run as Administrator.
 
+> **Windows Defender:** Because this is an unsigned PyInstaller executable, Windows Defender may flag it as a threat. You'll need to allow it manually (Windows Security > Virus & threat protection > Protection history > Allow on device). This is a common false positive with PyInstaller-packaged apps.
+
 ### Prerequisites for RAM RGB (SMBus)
 
 On Windows, DDR5 DRAM RGB control requires kernel-level port I/O access through [PawnIO](https://pawnio.eu/):
