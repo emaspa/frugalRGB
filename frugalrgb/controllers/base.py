@@ -48,3 +48,12 @@ class RGBController(ABC):
     @abstractmethod
     def apply(self) -> None:
         """Commit pending changes to hardware."""
+
+    @property
+    def supports_hardware_save(self) -> bool:
+        """Whether this device supports saving settings to non-volatile memory."""
+        return False
+
+    def save_to_hardware(self) -> None:
+        """Save current settings to non-volatile memory (survives power cycles)."""
+        raise NotImplementedError

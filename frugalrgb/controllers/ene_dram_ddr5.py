@@ -16,6 +16,7 @@ REG_V2_EFFECT_COLOR = 0x8160  # RGB triplets, 3 bytes per LED
 REG_APPLY = 0x80A0
 
 APPLY_VAL = 0x01
+SAVE_VAL = 0xAA
 NUM_LEDS = 8  # DDR5 sticks typically have 8 LEDs
 
 # Mode mapping
@@ -126,6 +127,14 @@ class ENEDDR5Controller(RGBController):
 
     def apply(self) -> None:
         self._write_register(REG_APPLY, APPLY_VAL)
+
+    @property
+    def supports_hardware_save(self) -> bool:
+        return True
+
+    def save_to_hardware(self) -> None:
+        self._write_register(REG_APPLY, SAVE_VAL)
+        log.info("Saved settings to NV flash on %s", self.name)
 
     def close(self) -> None:
         pass  # SMBus doesn't need per-device close

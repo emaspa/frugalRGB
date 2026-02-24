@@ -164,6 +164,15 @@ class FrugalRGBApp(ctk.CTk):
         )
         off_btn.pack(side="left", padx=5)
 
+        # Only show Save to Hardware if any controller supports it
+        if any(ctrl.supports_hardware_save for ctrl in self._controllers):
+            save_hw_btn = ctk.CTkButton(
+                btn_frame, text="Save to Hardware", width=130,
+                fg_color="#e67e22", hover_color="#d35400",
+                command=self._save_to_hardware,
+            )
+            save_hw_btn.pack(side="right", padx=5)
+
         # --- Now pack top content (fills remaining space) ---
 
         # Header
@@ -310,6 +319,129 @@ class FrugalRGBApp(ctk.CTk):
         log.info("Applying: effect=%s color=(%d,%d,%d) speed=%.1f", effect, r, g, b, speed)
         self._engine.start_effect(effect, r, g, b, speed,
                                   zone_map=zone_map, color_map=color_map)
+
+    def _save_to_hardware(self) -> None:
+        """Save current color/mode to DRAM NV flash with double confirmation."""
+        saveable = [
+            (card, ctrl) for card, ctrl in self._device_cards
+            if ctrl.supports_hardware_save
+        ]
+        if not saveable:
+            return
+
+        names = "\n".join(f"  - {ctrl.name}" for _, ctrl in saveable)
+
+        # First confirmation — explain the risk
+        dlg1 = ctk.CTkToplevel(self)
+        dlg1.title("Save to Hardware")
+        dlg1.resizable(False, False)
+        dw, dh = 480, 260
+        x = self.winfo_x() + self.winfo_width() // 2 - dw // 2
+        y = self.winfo_y() + self.winfo_height() // 2 - dh // 2
+        dlg1.geometry(f"{dw}x{dh}+{x}+{y}")
+        dlg1.transient(self)
+        dlg1.grab_set()
+
+        result = {"confirmed": False}
+
+        warning_text = (
+            "This will write the current color and mode to the\n"
+            "non-volatile flash memory on your RAM sticks:\n\n"
+            f"{names}\n\n"
+            "The saved settings will persist across power cycles\n"
+            "(boot color). This operation is known to be unstable\n"
+            "on some ENE firmware versions and may in rare cases\n"
+            "soft-lock the RGB controller, requiring a DIMM reseat\n"
+            "to recover.\n\n"
+            "Make sure you have already Applied the desired color."
+        )
+        ctk.CTkLabel(
+            dlg1, text=warning_text, justify="left",
+            font=ctk.CTkFont(size=12),
+        ).pack(padx=20, pady=(15, 10))
+
+        btn_frame1 = ctk.CTkFrame(dlg1, fg_color="transparent")
+        btn_frame1.pack(fill="x", padx=20, pady=(0, 10))
+
+        ctk.CTkButton(
+            btn_frame1, text="Cancel", width=100, command=dlg1.destroy,
+        ).pack(side="left", padx=5)
+        ctk.CTkButton(
+            btn_frame1, text="I understand, continue", width=180,
+            fg_color="#e67e22", hover_color="#d35400",
+            command=lambda: _first_ok(),
+        ).pack(side="right", padx=5)
+
+        def _first_ok():
+            result["confirmed"] = True
+            dlg1.destroy()
+
+        dlg1.wait_window()
+        if not result["confirmed"]:
+            return
+
+        # Second confirmation — final "are you sure"
+        dlg2 = ctk.CTkToplevel(self)
+        dlg2.title("Final Confirmation")
+        dlg2.resizable(False, False)
+        dw2, dh2 = 400, 130
+        x2 = self.winfo_x() + self.winfo_width() // 2 - dw2 // 2
+        y2 = self.winfo_y() + self.winfo_height() // 2 - dh2 // 2
+        dlg2.geometry(f"{dw2}x{dh2}+{x2}+{y2}")
+        dlg2.transient(self)
+        dlg2.grab_set()
+
+        result2 = {"confirmed": False}
+
+        ctk.CTkLabel(
+            dlg2,
+            text="Are you absolutely sure?\nThis writes to hardware flash and cannot be undone easily.",
+            justify="center", font=ctk.CTkFont(size=13, weight="bold"),
+        ).pack(padx=20, pady=(15, 10))
+
+        btn_frame2 = ctk.CTkFrame(dlg2, fg_color="transparent")
+        btn_frame2.pack(fill="x", padx=20, pady=(0, 10))
+
+        ctk.CTkButton(
+            btn_frame2, text="Cancel", width=100, command=dlg2.destroy,
+        ).pack(side="left", padx=5)
+        ctk.CTkButton(
+            btn_frame2, text="Save to Hardware", width=150,
+            fg_color="#dc3545", hover_color="#c82333",
+            command=lambda: _second_ok(),
+        ).pack(side="right", padx=5)
+
+        def _second_ok():
+            result2["confirmed"] = True
+            dlg2.destroy()
+
+        dlg2.wait_window()
+        if not result2["confirmed"]:
+            return
+
+        # Perform the save
+        for _card, ctrl in saveable:
+            try:
+                ctrl.save_to_hardware()
+            except Exception as e:
+                log.error("Failed to save to hardware on %s: %s", ctrl.name, e)
+
+        # Success feedback
+        dlg3 = ctk.CTkToplevel(self)
+        dlg3.title("Saved")
+        dlg3.resizable(False, False)
+        dw3, dh3 = 300, 90
+        x3 = self.winfo_x() + self.winfo_width() // 2 - dw3 // 2
+        y3 = self.winfo_y() + self.winfo_height() // 2 - dh3 // 2
+        dlg3.geometry(f"{dw3}x{dh3}+{x3}+{y3}")
+        dlg3.transient(self)
+        dlg3.grab_set()
+        ctk.CTkLabel(dlg3, text="Settings saved to hardware flash.").pack(
+            expand=True, padx=20, pady=(15, 5),
+        )
+        ctk.CTkButton(dlg3, text="OK", width=80, command=dlg3.destroy).pack(
+            pady=(0, 10),
+        )
 
     def _turn_off(self) -> None:
         log.info("Turning off all LEDs")
