@@ -39,7 +39,7 @@ class FrugalRGBApp(ctk.CTk):
         ctk.set_default_color_theme("blue")
 
         self.title("frugalRGB - no bloat, just LEDs")
-        w, h = 700, 580
+        w, h = 700, 600
         sx = self.winfo_screenwidth() // 2 - w // 2
         sy = self.winfo_screenheight() // 2 - h // 2
         self.geometry(f"{w}x{h}+{sx}+{sy}")
@@ -61,7 +61,9 @@ class FrugalRGBApp(ctk.CTk):
             self.withdraw()
 
     def _build_ui(self) -> None:
-        # Bottom bar FIRST so Tkinter reserves space before content fills the rest
+        # --- Pack bottom sections FIRST so Tkinter reserves their space ---
+
+        # Bottom bar (diagnostics + version)
         bottom_bar = ctk.CTkFrame(self, fg_color="transparent")
         bottom_bar.pack(side="bottom", fill="x", padx=10, pady=(0, 4))
 
@@ -76,6 +78,93 @@ class FrugalRGBApp(ctk.CTk):
             bottom_bar, text="v0.01", text_color="gray", font=ctk.CTkFont(size=11),
         )
         version_label.pack(side="right")
+
+        # Presets row
+        preset_frame = ctk.CTkFrame(self, fg_color="transparent")
+        preset_frame.pack(side="bottom", fill="x", padx=15, pady=(0, 6))
+
+        preset_label = ctk.CTkLabel(preset_frame, text="Preset:")
+        preset_label.pack(side="left", padx=(0, 5))
+
+        self._preset_var = ctk.StringVar(value="")
+        self._preset_menu = ctk.CTkOptionMenu(
+            preset_frame, variable=self._preset_var,
+            values=["(none)"], width=160,
+            command=self._on_preset_selected,
+        )
+        self._preset_menu.pack(side="left", padx=5)
+
+        save_btn = ctk.CTkButton(
+            preset_frame, text="Save", width=60, command=self._save_preset
+        )
+        save_btn.pack(side="left", padx=5)
+
+        del_btn = ctk.CTkButton(
+            preset_frame, text="Delete", width=60, fg_color="#dc3545",
+            hover_color="#c82333", command=self._delete_preset
+        )
+        del_btn.pack(side="left", padx=5)
+
+        startup_label = ctk.CTkLabel(preset_frame, text="On start:")
+        startup_label.pack(side="left", padx=(20, 5))
+
+        self._startup_preset_var = ctk.StringVar(value="(none)")
+        self._startup_preset_menu = ctk.CTkOptionMenu(
+            preset_frame, variable=self._startup_preset_var,
+            values=["(none)"], width=140,
+            command=lambda _: self._save_config(),
+        )
+        self._startup_preset_menu.pack(side="left", padx=5)
+
+        # Options row
+        opts_frame = ctk.CTkFrame(self, fg_color="transparent")
+        opts_frame.pack(side="bottom", fill="x", padx=15, pady=(0, 4))
+
+        self._off_on_close_var = ctk.BooleanVar(value=False)
+        self._off_on_close_cb = ctk.CTkCheckBox(
+            opts_frame, text="Off on close", variable=self._off_on_close_var,
+            width=100, command=self._save_config,
+        )
+        self._off_on_close_cb.pack(side="left", padx=5)
+
+        self._minimize_to_tray_var = ctk.BooleanVar(value=False)
+        minimize_to_tray_cb = ctk.CTkCheckBox(
+            opts_frame, text="Close to tray", variable=self._minimize_to_tray_var,
+            width=100, command=self._save_config,
+        )
+        minimize_to_tray_cb.pack(side="left", padx=5)
+
+        self._start_minimized_var = ctk.BooleanVar(value=False)
+        start_minimized_cb = ctk.CTkCheckBox(
+            opts_frame, text="Start minimized", variable=self._start_minimized_var,
+            width=110, command=self._save_config,
+        )
+        start_minimized_cb.pack(side="left", padx=5)
+
+        self._start_at_login_var = ctk.BooleanVar(value=self._startup_shortcut_exists())
+        start_at_login_cb = ctk.CTkCheckBox(
+            opts_frame, text="Start at login", variable=self._start_at_login_var,
+            width=100, command=self._toggle_start_at_login,
+        )
+        start_at_login_cb.pack(side="left", padx=5)
+
+        # Bottom buttons (Apply / LEDs Off)
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.pack(side="bottom", fill="x", padx=15, pady=(4, 4))
+
+        apply_btn = ctk.CTkButton(
+            btn_frame, text="Apply", width=100, fg_color="#28a745",
+            hover_color="#218838", command=self._apply
+        )
+        apply_btn.pack(side="left", padx=5)
+
+        off_btn = ctk.CTkButton(
+            btn_frame, text="LEDs Off", width=80, fg_color="#dc3545",
+            hover_color="#c82333", command=self._turn_off
+        )
+        off_btn.pack(side="left", padx=5)
+
+        # --- Now pack top content (fills remaining space) ---
 
         # Header
         header = ctk.CTkLabel(
@@ -148,91 +237,6 @@ class FrugalRGBApp(ctk.CTk):
         )
         self._calibration.pack(fill="x", padx=15, pady=5)
 
-        # Bottom buttons
-        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
-        btn_frame.pack(fill="x", padx=15, pady=(10, 2))
-
-        apply_btn = ctk.CTkButton(
-            btn_frame, text="Apply", width=100, fg_color="#28a745",
-            hover_color="#218838", command=self._apply
-        )
-        apply_btn.pack(side="left", padx=5)
-
-        off_btn = ctk.CTkButton(
-            btn_frame, text="LEDs Off", width=80, fg_color="#dc3545",
-            hover_color="#c82333", command=self._turn_off
-        )
-        off_btn.pack(side="left", padx=5)
-
-        # Options row
-        opts_frame = ctk.CTkFrame(self, fg_color="transparent")
-        opts_frame.pack(fill="x", padx=15, pady=(2, 8))
-
-        self._off_on_close_var = ctk.BooleanVar(value=False)
-        self._off_on_close_cb = ctk.CTkCheckBox(
-            opts_frame, text="Off on close", variable=self._off_on_close_var,
-            width=100, command=self._save_config,
-        )
-        self._off_on_close_cb.pack(side="left", padx=5)
-
-        self._minimize_to_tray_var = ctk.BooleanVar(value=False)
-        minimize_to_tray_cb = ctk.CTkCheckBox(
-            opts_frame, text="Close to tray", variable=self._minimize_to_tray_var,
-            width=100, command=self._save_config,
-        )
-        minimize_to_tray_cb.pack(side="left", padx=5)
-
-        self._start_minimized_var = ctk.BooleanVar(value=False)
-        start_minimized_cb = ctk.CTkCheckBox(
-            opts_frame, text="Start minimized", variable=self._start_minimized_var,
-            width=110, command=self._save_config,
-        )
-        start_minimized_cb.pack(side="left", padx=5)
-
-        self._start_at_login_var = ctk.BooleanVar(value=self._startup_shortcut_exists())
-        start_at_login_cb = ctk.CTkCheckBox(
-            opts_frame, text="Start at login", variable=self._start_at_login_var,
-            width=100, command=self._toggle_start_at_login,
-        )
-        start_at_login_cb.pack(side="left", padx=5)
-
-        # Presets row
-        preset_frame = ctk.CTkFrame(self, fg_color="transparent")
-        preset_frame.pack(fill="x", padx=15, pady=(0, 10))
-
-        preset_label = ctk.CTkLabel(preset_frame, text="Preset:")
-        preset_label.pack(side="left", padx=(0, 5))
-
-        self._preset_var = ctk.StringVar(value="")
-        self._preset_menu = ctk.CTkOptionMenu(
-            preset_frame, variable=self._preset_var,
-            values=["(none)"], width=160,
-            command=self._on_preset_selected,
-        )
-        self._preset_menu.pack(side="left", padx=5)
-
-        save_btn = ctk.CTkButton(
-            preset_frame, text="Save", width=60, command=self._save_preset
-        )
-        save_btn.pack(side="left", padx=5)
-
-        del_btn = ctk.CTkButton(
-            preset_frame, text="Delete", width=60, fg_color="#dc3545",
-            hover_color="#c82333", command=self._delete_preset
-        )
-        del_btn.pack(side="left", padx=5)
-
-        startup_label = ctk.CTkLabel(preset_frame, text="On start:")
-        startup_label.pack(side="left", padx=(20, 5))
-
-        self._startup_preset_var = ctk.StringVar(value="(none)")
-        self._startup_preset_menu = ctk.CTkOptionMenu(
-            preset_frame, variable=self._startup_preset_var,
-            values=["(none)"], width=140,
-            command=lambda _: self._save_config(),
-        )
-        self._startup_preset_menu.pack(side="left", padx=5)
-
 
     def _update_color_display(self) -> None:
         r, g, b = self._current_color
@@ -256,14 +260,15 @@ class FrugalRGBApp(ctk.CTk):
         except ValueError:
             pass
 
-    def _on_color_selected(self, r: int, g: int, b: int) -> None:
+    def _on_color_selected(self, r: int, g: int, b: int,
+                           all_devices: bool = False) -> None:
         self._current_color = (r, g, b)
         self._r_var.set(str(r))
         self._g_var.set(str(g))
         self._b_var.set(str(b))
         self._update_color_display()
         for card, _ctrl in self._device_cards:
-            if card.enabled:
+            if all_devices or card.enabled:
                 card.update_color(r, g, b)
 
 
@@ -310,7 +315,7 @@ class FrugalRGBApp(ctk.CTk):
         log.info("Turning off all LEDs")
         zone_map = self._get_zone_map()
         self._engine.turn_off(zone_map=zone_map)
-        self._on_color_selected(0, 0, 0)
+        self._on_color_selected(0, 0, 0, all_devices=True)
 
     def _load_presets_list(self) -> dict:
         """Load presets from file and return the dict."""
@@ -342,7 +347,7 @@ class FrugalRGBApp(ctk.CTk):
         if name in presets:
             data = presets[name]
             r, g, b = data["color"]
-            self._on_color_selected(r, g, b)
+            self._on_color_selected(r, g, b, all_devices=True)
             if "effect" in data:
                 self._effect_selector.set_effect(data["effect"])
             if "speed" in data:
