@@ -5,6 +5,7 @@ from .base import RGBController
 from .asrock_polychrome import detect_asrock_polychrome_usb
 from .ene_dram import detect_ene_dram
 from .ene_dram_ddr5 import detect_ene_ddr5
+from .msi_mystic_light import detect_msi_mystic_light
 
 log = logging.getLogger(__name__)
 
@@ -20,6 +21,12 @@ def detect_all(bus: SMBusInterface | None = None) -> list[RGBController]:
     if polychrome is not None:
         log.info("  Found: %s", polychrome.name)
         controllers.append(polychrome)
+
+    # MSI Mystic Light USB HID
+    msi = detect_msi_mystic_light()
+    if msi is not None:
+        log.info("  Found: %s", msi.name)
+        controllers.append(msi)
 
     # ENE DRAM controllers via SMBus
     if bus is not None:

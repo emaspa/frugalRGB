@@ -36,6 +36,9 @@ def collect_diagnostics(controllers, bus=None, log_capture: str = "") -> str:
             elif cls_name == "ENEDDR5Controller":
                 addr = getattr(ctrl, "_addr", 0)
                 zf.writestr(f"ene_ddr5_0x{addr:02X}.txt", _ene_ddr5_detail(ctrl))
+            elif cls_name == "MSIMysticLightController":
+                pid = getattr(ctrl, "_pid", 0)
+                zf.writestr(f"msi_mystic_0x{pid:04X}.txt", _msi_detail(ctrl))
 
         # Config files
         for path, arcname in [(CONFIG_FILE, "config.json"), (PRESETS_FILE, "presets.json")]:
@@ -264,5 +267,57 @@ def _ene_ddr5_detail(ctrl) -> str:
     num_leds = getattr(ctrl, "_num_leds", "?")
     lines.append(f"LED count: {num_leds}")
     lines.append("")
+
+    return "\n".join(lines)
+
+
+def _msi_detail(ctrl) -> str:
+    """Dump MSI Mystic Light 185-byte state packet."""
+    lines = ["=== MSI Mystic Light Detail ===", ""]
+
+    pid = getattr(ctrl, "_pid", 0)
+    lines.append(f"Device: {ctrl.name}")
+    lines.append(f"PID: 0x{pid:04X}")
+    if hasattr(ctrl, "_path"):
+        lines.append(f"HID path: {ctrl._path}")
+    lines.append(f"Product string: {getattr(ctrl, '_product_string', '?')}")
+    lines.append(f"Onboard LEDs: {getattr(ctrl, '_onboard_leds', '?')}")
+    lines.append("")
+
+    # Full state hex dump
+    state = getattr(ctrl, "_state", None)
+    if state:
+        lines.append(f"--- Full state ({len(state)} bytes) ---")
+        for row_start in range(0, len(state), 16):
+            chunk = state[row_start:row_start + 16]
+            hex_str = " ".join(f"{b:02X}" for b in chunk)
+            lines.append(f"  {row_start:3d}: {hex_str}")
+        lines.append("")
+
+        # Parse zone data
+        from .controllers.msi_mystic_light import ZONE_DEFS
+        lines.append("--- Zone data ---")
+        mode_names = {
+            0x00: "Disable", 0x01: "Static", 0x02: "Breathing",
+            0x03: "Flashing", 0x04: "Double Flashing", 0x05: "Lightning",
+            0x15: "Color Shift", 0x19: "Rainbow",
+        }
+        for name, zdef in ZONE_DEFS.items():
+            offset = zdef["offset"]
+            effect = state[offset]
+            r, g, b = state[offset+1], state[offset+2], state[offset+3]
+            flags = state[offset+4]
+            brightness = (flags >> 2) & 0x1F
+            speed = flags & 0x03
+            color_flags = state[offset+8]
+            mode_str = mode_names.get(effect, f"0x{effect:02X}")
+            lines.append(
+                f"  {name:16s}: mode={mode_str:12s} "
+                f"RGB=({r:3d},{g:3d},{b:3d}) "
+                f"bright={brightness:2d} speed={speed} "
+                f"flags=0x{color_flags:02X}"
+            )
+        lines.append(f"  save_data: {state[184]}")
+        lines.append("")
 
     return "\n".join(lines)

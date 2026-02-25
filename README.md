@@ -11,6 +11,7 @@ This app was built for **my specific hardware**. It currently supports:
 | Device | Connection | Notes |
 |--------|-----------|-------|
 | **ASRock Polychrome USB** (VID `26CE`, PID `01A2`) | USB HID | Tested on ASRock Z890M Riptide. Does **not** require admin. |
+| **MSI Mystic Light** (VID `1462`, 185-byte protocol) | USB HID | Tested on MSI MPG Z790I EDGE WIFI (PID `7E03`). Does **not** require admin. |
 | **ENE AUDA-series DDR5 DRAM RGB** (addresses `0x70`–`0x77`) | SMBus (i801) | Tested with KLEVV DDR5 RGB. **Requires admin** (kernel-level SMBus access). |
 
 ### What about my hardware?
@@ -115,6 +116,7 @@ frugalrgb/
     base.py                   Abstract controller interface
     detect.py                 Device auto-detection
     asrock_polychrome.py      ASRock Polychrome USB HID protocol
+    msi_mystic_light.py       MSI Mystic Light USB HID protocol
     ene_dram_ddr5.py          ENE AUDA DDR5 DRAM SMBus protocol
   smbus/
     interface.py              Platform-agnostic SMBus ABC
