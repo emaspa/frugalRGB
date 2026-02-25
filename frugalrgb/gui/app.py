@@ -384,7 +384,7 @@ class FrugalRGBApp(ctk.CTk):
         dlg2 = ctk.CTkToplevel(self)
         dlg2.title("Final Confirmation")
         dlg2.resizable(False, False)
-        dw2, dh2 = 400, 130
+        dw2, dh2 = 500, 140
         x2 = self.winfo_x() + self.winfo_width() // 2 - dw2 // 2
         y2 = self.winfo_y() + self.winfo_height() // 2 - dh2 // 2
         dlg2.geometry(f"{dw2}x{dh2}+{x2}+{y2}")
