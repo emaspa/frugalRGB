@@ -75,7 +75,7 @@ class FrugalRGBApp(ctk.CTk):
         diag_btn.pack(side="left")
 
         version_label = ctk.CTkLabel(
-            bottom_bar, text="v0.01", text_color="gray", font=ctk.CTkFont(size=11),
+            bottom_bar, text="v0.02", text_color="gray", font=ctk.CTkFont(size=11),
         )
         version_label.pack(side="right")
 
