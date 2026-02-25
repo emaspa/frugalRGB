@@ -16,7 +16,7 @@ This app was built for **my specific hardware**. It currently supports:
 
 ### What about my hardware?
 
-There is a **Diagnostics** button in the app that collects device info, register dumps, and system details into a zip file on your Desktop. If you'd like support for your hardware, you can [open an issue](../../issues) and attach that zip. I'll do my best to look into it, but there's no commitment to extend support — this is a personal project.
+There is a **Diagnostics** button in the app that collects device info, register dumps, and system details into a zip file on your Desktop. Run as admin to include SMBus/RAM data. If you'd like support for your hardware, you can [open an issue](../../issues) and attach that zip. I'll do my best to look into it, but there's no commitment to extend support — this is a personal project.
 
 ## Features
 
