@@ -479,6 +479,9 @@ class FrugalRGBApp(ctk.CTk):
         if name in presets:
             data = presets[name]
             r, g, b = data["color"]
+            # Reset all zone dropdowns so preset applies to all LEDs/zones
+            for card, _ctrl in self._device_cards:
+                card.reset_zone()
             self._on_color_selected(r, g, b, all_devices=True)
             if "effect" in data:
                 self._effect_selector.set_effect(data["effect"])

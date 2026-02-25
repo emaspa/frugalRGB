@@ -49,7 +49,6 @@ class ENEDDR5Controller(RGBController):
         self._device_name = device_name
         self._num_leds = NUM_LEDS
         self._current_mode = RGBMode.STATIC
-        self._zones = [RGBZone(0, "DRAM")]
         self._color_correction = (1.0, 1.0, 1.0)
         self._direction = direction
 
@@ -58,6 +57,11 @@ class ENEDDR5Controller(RGBController):
         if led_count is not None and 1 <= led_count <= 32:
             self._num_leds = led_count
             log.debug("LED count from config: %d", self._num_leds)
+
+        # Build zones: "All LEDs" + one per individual LED
+        self._zones = [RGBZone(0, "All LEDs")]
+        for i in range(self._num_leds):
+            self._zones.append(RGBZone(i + 1, f"LED {i + 1}"))
 
         # Set effect mode (required for V2 effect color registers)
         self._write_register(REG_DIRECT_SELECT, 0x00)
@@ -106,14 +110,24 @@ class ENEDDR5Controller(RGBController):
         self._bus.write_word_data(self._addr, 0x00, _swap16(reg))
         self._bus.write_byte_data(self._addr, 0x01, value)
 
+    def _write_led_color(self, led_index: int, r: int, g: int, b: int) -> None:
+        """Write color to a single LED's effect color registers (R, B, G order)."""
+        base = REG_V2_EFFECT_COLOR + led_index * 3
+        self._write_register(base, r)
+        self._write_register(base + 1, b)
+        self._write_register(base + 2, g)
+
     def set_color(self, r: int, g: int, b: int, zone: int | None = None) -> None:
         r, g, b = self._correct_color(r, g, b)
-        # Write to V2 effect color registers — hardware byte order is R, B, G
-        for i in range(self._num_leds):
-            base = REG_V2_EFFECT_COLOR + i * 3
-            self._write_register(base, r)
-            self._write_register(base + 1, b)
-            self._write_register(base + 2, g)
+        if zone is None or zone == 0:
+            # All LEDs
+            for i in range(self._num_leds):
+                self._write_led_color(i, r, g, b)
+        else:
+            # Individual LED (zone 1 = LED 0, zone 2 = LED 1, etc.)
+            led_index = zone - 1
+            if 0 <= led_index < self._num_leds:
+                self._write_led_color(led_index, r, g, b)
 
     def set_mode(self, mode: RGBMode, speed: int = 3) -> None:
         self._current_mode = mode

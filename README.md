@@ -2,7 +2,7 @@
 
 A lightweight, standalone RGB controller for PC hardware. Built for personal use as a replacement for [SignalRGB](https://signalrgb.com/) (too bloated) and [OpenRGB](https://openrgb.org/) (conflicts with Stream Deck, buggy on some hardware).
 
-![frugalRGB screenshot](screenshot2.png)
+![frugalRGB screenshot](screenshot_v002.png)
 
 ## Supported devices
 

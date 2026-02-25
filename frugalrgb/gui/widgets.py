@@ -107,6 +107,10 @@ class DeviceCard(ctk.CTkFrame):
     def enabled(self) -> bool:
         return self._enabled_var.get()
 
+    def reset_zone(self) -> None:
+        """Reset zone dropdown to 'All Zones'."""
+        self._zone_var.set("All Zones")
+
 
 class EffectSelector(ctk.CTkFrame):
     """Dropdown for effect mode + speed slider."""
