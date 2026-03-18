@@ -39,6 +39,10 @@ def collect_diagnostics(controllers, bus=None, log_capture: str = "") -> str:
             elif cls_name == "MSIMysticLightController":
                 pid = getattr(ctrl, "_pid", 0)
                 zf.writestr(f"msi_mystic_0x{pid:04X}.txt", _msi_detail(ctrl))
+            elif cls_name == "GigabyteRGBFusion2Controller":
+                pid = getattr(ctrl, "_pid", 0)
+                zf.writestr(f"gigabyte_rgb_0x{pid:04X}.txt",
+                            _gigabyte_detail(ctrl))
 
         # Config files
         for path, arcname in [(CONFIG_FILE, "config.json"), (PRESETS_FILE, "presets.json")]:
@@ -319,5 +323,61 @@ def _msi_detail(ctrl) -> str:
             )
         lines.append(f"  save_data: {state[184]}")
         lines.append("")
+
+    return "\n".join(lines)
+
+
+def _gigabyte_detail(ctrl) -> str:
+    """Dump Gigabyte RGB Fusion 2.0 device info."""
+    lines = ["=== Gigabyte RGB Fusion 2.0 Detail ===", ""]
+
+    lines.append(f"Device: {ctrl.name}")
+    pid = getattr(ctrl, "_pid", 0)
+    lines.append(f"PID: 0x{pid:04X}")
+    if hasattr(ctrl, "_path"):
+        lines.append(f"HID path: {ctrl._path}")
+    lines.append(f"Product string: {getattr(ctrl, '_product_string', '?')}")
+    lines.append(f"Device name: {getattr(ctrl, '_device_name', '?')}")
+    lines.append(f"FW version: {getattr(ctrl, '_fw_version', '?')}")
+    lines.append(f"Chip ID: 0x{getattr(ctrl, '_chip_id', 0):08X}")
+    lines.append(f"IT5711 mode: {getattr(ctrl, '_is_5711', False)}")
+    lines.append("")
+
+    # Re-read device info for raw dump
+    try:
+        ctrl._send_cmd(0x60)
+        info = ctrl._recv_packet()
+        if info:
+            lines.append(f"--- Device info report ({len(info)} bytes) ---")
+            for row_start in range(0, len(info), 16):
+                chunk = info[row_start:row_start + 16]
+                hex_str = " ".join(f"{b:02X}" for b in chunk)
+                lines.append(f"  {row_start:3d}: {hex_str}")
+            lines.append("")
+
+            # Parse key fields
+            if len(info) >= 10:
+                lines.append("--- Parsed fields ---")
+                lines.append(f"  product byte: 0x{info[1]:02X}")
+                lines.append(f"  device_num: {info[2]}")
+                lines.append(f"  strip_detect: 0x{info[3]:02X}")
+                lines.append(f"  fw_ver: {'.'.join(str(b) for b in info[4:8])}")
+                lines.append(f"  led_count_high: 0x{info[8]:02X}")
+                lines.append(f"  led_count_low: 0x{info[9]:02X}")
+                if len(info) >= 12:
+                    lines.append(f"  strip_ctrl_length1: {info[10]}")
+                    lines.append(f"  support_cmd_flag: 0x{info[11]:02X}")
+                lines.append("")
+    except Exception as e:
+        lines.append(f"Failed to read device info: {e}")
+        lines.append("")
+
+    # Zone layout
+    lines.append("--- Zone layout ---")
+    zone_leds = getattr(ctrl, "_zone_leds", [])
+    for z in ctrl.zones:
+        led_idx = zone_leds[z.zone_id] if z.zone_id < len(zone_leds) else None
+        lines.append(f"  Zone {z.zone_id}: {z.name} (LED index={led_idx})")
+    lines.append("")
 
     return "\n".join(lines)
