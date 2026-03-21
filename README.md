@@ -13,6 +13,7 @@ This app was built for **my specific hardware**. It currently supports:
 | **ASRock Polychrome USB** (VID `26CE`, PID `01A2`) | USB HID | Tested on ASRock Z890M Riptide. Does **not** require admin. |
 | **MSI Mystic Light** (VID `1462`, 185-byte protocol) | USB HID | Tested on MSI MPG Z790I EDGE WIFI (PID `7E03`). Does **not** require admin. |
 | **Gigabyte RGB Fusion 2.0** (VID `048D`, ITE IT5711/IT8297) | USB HID | Tested on Gigabyte X870E Aorus Master X3D. Does **not** require admin. |
+| **ASUS GPU RGB** (ENE controller at I2C `0x67`) | NvAPI I2C | Tested on ASUS TUF RTX 5090. Does **not** require admin. NVIDIA GPU only. |
 | **ENE AUDA-series DDR5 DRAM RGB** (addresses `0x70`–`0x77`) | SMBus (i801) | Tested with KLEVV DDR5 RGB. **Requires admin** (kernel-level SMBus access). |
 
 ### What about my hardware?
@@ -120,10 +121,12 @@ frugalrgb/
     asrock_polychrome.py      ASRock Polychrome USB HID protocol
     msi_mystic_light.py       MSI Mystic Light USB HID protocol
     gigabyte_rgb_fusion2.py   Gigabyte RGB Fusion 2.0 USB HID protocol
+    asus_gpu.py               ASUS GPU RGB via ENE I2C controller
     ene_dram_ddr5.py          ENE AUDA DDR5 DRAM SMBus protocol
   smbus/
     interface.py              Platform-agnostic SMBus ABC
     windows.py                PawnIO-backed i801 SMBus (Windows)
+    nvapi.py                  NvAPI I2C for GPU-connected controllers
     linux.py                  /dev/i2c-* via smbus2 (Linux)
   effects/
     engine.py                 Threaded effect loop (hw or sw)

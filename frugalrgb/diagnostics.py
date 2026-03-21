@@ -43,6 +43,8 @@ def collect_diagnostics(controllers, bus=None, log_capture: str = "") -> str:
                 pid = getattr(ctrl, "_pid", 0)
                 zf.writestr(f"gigabyte_rgb_0x{pid:04X}.txt",
                             _gigabyte_detail(ctrl))
+            elif cls_name == "ASUSGPUController":
+                zf.writestr("asus_gpu.txt", _asus_gpu_detail(ctrl))
 
         # Config files
         for path, arcname in [(CONFIG_FILE, "config.json"), (PRESETS_FILE, "presets.json")]:
@@ -378,6 +380,65 @@ def _gigabyte_detail(ctrl) -> str:
     for z in ctrl.zones:
         led_idx = zone_leds[z.zone_id] if z.zone_id < len(zone_leds) else None
         lines.append(f"  Zone {z.zone_id}: {z.name} (LED index={led_idx})")
+    lines.append("")
+
+    return "\n".join(lines)
+
+
+def _asus_gpu_detail(ctrl) -> str:
+    """Dump ASUS GPU ENE RGB controller info."""
+    lines = ["=== ASUS GPU RGB Detail ===", ""]
+
+    lines.append(f"Device: {ctrl.name}")
+    lines.append(f"GPU: {getattr(ctrl, '_gpu_name', '?')}")
+    lines.append(f"Subsystem: {getattr(ctrl, '_subsys_name', '?')}")
+    lines.append(f"ENE device: {getattr(ctrl, '_device_name', '?')}")
+    lines.append(f"LED count: {getattr(ctrl, '_num_leds', '?')}")
+    lines.append("")
+
+    # Config table dump (0x1C00-0x1C1F)
+    lines.append("--- Config table (0x1C00-0x1C1F) ---")
+    row = []
+    for i in range(0x20):
+        val = ctrl._read_register(0x1C00 + i)
+        row.append(f"{val:02X}" if val is not None else "??")
+        if (i + 1) % 16 == 0:
+            offset = 0x1C00 + i - 15
+            lines.append(f"  0x{offset:04X}: {' '.join(row)}")
+            row = []
+    lines.append("")
+
+    # Control registers
+    lines.append("--- Control registers ---")
+    reg_names = {
+        0x8020: "Direct Select", 0x8021: "Mode", 0x8022: "Speed",
+        0x8023: "Direction",
+    }
+    for reg in range(0x8020, 0x8024):
+        val = ctrl._read_register(reg)
+        name = reg_names.get(reg, "")
+        lines.append(f"  0x{reg:04X}: 0x{val:02X}  {name}" if val is not None
+                     else f"  0x{reg:04X}: ??  {name}")
+    lines.append("")
+
+    # Effect color registers
+    num_leds = getattr(ctrl, "_num_leds", 1)
+    lines.append(f"--- Effect colors (0x8160, {num_leds} LEDs) ---")
+    for i in range(num_leds):
+        base = 0x8160 + i * 3
+        r = ctrl._read_register(base)
+        b = ctrl._read_register(base + 1)
+        g = ctrl._read_register(base + 2)
+        if r is not None and b is not None and g is not None:
+            lines.append(f"  LED {i}: R={r:3d} G={g:3d} B={b:3d}")
+        else:
+            lines.append(f"  LED {i}: ??")
+    lines.append("")
+
+    # Zones
+    lines.append("--- Zones ---")
+    for z in ctrl.zones:
+        lines.append(f"  Zone {z.zone_id}: {z.name}")
     lines.append("")
 
     return "\n".join(lines)
