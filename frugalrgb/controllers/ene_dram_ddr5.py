@@ -68,9 +68,7 @@ class ENEDDR5Controller(RGBController):
 
     @property
     def name(self) -> str:
-        if "E6K5" in self._device_name:
-            return f"KLEVV DDR5 RGB (0x{self._addr:02X})"
-        return f"ENE DDR5 (0x{self._addr:02X}) {self._device_name}"
+        return f"ENE DDR5 (0x{self._addr:02X})"
 
     @property
     def zones(self) -> list[RGBZone]:

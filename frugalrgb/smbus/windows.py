@@ -29,6 +29,7 @@ else:
     _BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 MODULE_DIR = os.path.join(_BASE_DIR, "modules")
 SMBUS_MODULE_PATH = os.path.join(MODULE_DIR, "SmbusI801.bin")
+SMBUS_PIIX4_MODULE_PATH = os.path.join(MODULE_DIR, "SmbusPIIX4.bin")
 
 # Windows mutex for SMBus access coordination
 SMBUS_MUTEX_NAME = r"Global\Access_SMBUS.HTP.Method"
@@ -75,11 +76,32 @@ class PawnIOExecutor:
 
         hr = self._dll.pawnio_load(self._handle, ctypes.create_string_buffer(blob), len(blob))
         if hr != 0:
-            self._dll.pawnio_close(self._handle)
-            raise RuntimeError(
-                f"Failed to load SmbusI801 module: HRESULT=0x{hr & 0xFFFFFFFF:08X}\n"
-                "The module may be incompatible with your PawnIO version."
-            )
+            # i801 failed — try PIIX4 (AMD FCH / Fusion Controller Hub)
+            piix4_path = SMBUS_PIIX4_MODULE_PATH
+            if os.path.exists(piix4_path):
+                import logging as _logging
+                _logging.getLogger(__name__).info(
+                    "SmbusI801 not available (HRESULT=0x%08X), trying SmbusPIIX4 (AMD)",
+                    hr & 0xFFFFFFFF,
+                )
+                with open(piix4_path, "rb") as f:
+                    blob = f.read()
+                hr2 = self._dll.pawnio_load(
+                    self._handle, ctypes.create_string_buffer(blob), len(blob)
+                )
+                if hr2 != 0:
+                    self._dll.pawnio_close(self._handle)
+                    raise RuntimeError(
+                        f"Failed to load SMBus module (i801: 0x{hr & 0xFFFFFFFF:08X}, "
+                        f"PIIX4: 0x{hr2 & 0xFFFFFFFF:08X})\n"
+                        "The module may be incompatible with your PawnIO version."
+                    )
+            else:
+                self._dll.pawnio_close(self._handle)
+                raise RuntimeError(
+                    f"Failed to load SmbusI801 module: HRESULT=0x{hr & 0xFFFFFFFF:08X}\n"
+                    "The module may be incompatible with your PawnIO version."
+                )
 
         # Acquire SMBus mutex (shared with FanControl, LHM, etc.)
         kernel32 = ctypes.windll.kernel32

@@ -43,6 +43,10 @@ def collect_diagnostics(controllers, bus=None, log_capture: str = "") -> str:
                 pid = getattr(ctrl, "_pid", 0)
                 zf.writestr(f"gigabyte_rgb_0x{pid:04X}.txt",
                             _gigabyte_detail(ctrl))
+            elif cls_name == "AsusAuraUSBController":
+                pid = getattr(ctrl, "_pid", 0)
+                zf.writestr(f"asus_aura_usb_0x{pid:04X}.txt",
+                            _asus_aura_usb_detail(ctrl))
             elif cls_name == "ASUSGPUController":
                 zf.writestr("asus_gpu.txt", _asus_gpu_detail(ctrl))
 
@@ -100,6 +104,8 @@ def _system_info() -> str:
         )
         smbus_bin = os.path.join(module_dir, "SmbusI801.bin")
         lines.append(f"SmbusI801.bin: {'found' if os.path.exists(smbus_bin) else 'NOT FOUND'}")
+        piix4_bin = os.path.join(module_dir, "SmbusPIIX4.bin")
+        lines.append(f"SmbusPIIX4.bin: {'found' if os.path.exists(piix4_bin) else 'NOT FOUND'}")
         lines.append("")
 
     return "\n".join(lines)
@@ -433,6 +439,31 @@ def _asus_gpu_detail(ctrl) -> str:
             lines.append(f"  LED {i}: R={r:3d} G={g:3d} B={b:3d}")
         else:
             lines.append(f"  LED {i}: ??")
+    lines.append("")
+
+    # Zones
+    lines.append("--- Zones ---")
+    for z in ctrl.zones:
+        lines.append(f"  Zone {z.zone_id}: {z.name}")
+    lines.append("")
+
+    return "\n".join(lines)
+
+
+def _asus_aura_usb_detail(ctrl) -> str:
+    """Dump ASUS Aura USB controller info."""
+    lines = ["=== ASUS Aura USB Detail ===", ""]
+
+    pid = getattr(ctrl, "_pid", 0)
+    lines.append(f"Device: {ctrl.name}")
+    lines.append(f"PID: 0x{pid:04X}")
+    if hasattr(ctrl, "_path"):
+        lines.append(f"HID path: {ctrl._path}")
+    lines.append(f"Product string: {getattr(ctrl, '_product_string', '?')}")
+    lines.append(f"Firmware: {getattr(ctrl, '_firmware', '?')}")
+    lines.append("")
+
+    lines.append("Note: ASUS Aura protocol is fire-and-forget (no read responses).")
     lines.append("")
 
     # Zones

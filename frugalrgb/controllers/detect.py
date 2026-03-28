@@ -6,6 +6,7 @@ from .asrock_polychrome import detect_asrock_polychrome_usb
 from .ene_dram import detect_ene_dram
 from .ene_dram_ddr5 import detect_ene_ddr5
 from .asus_gpu import detect_asus_gpu
+from .asus_aura_usb import detect_asus_aura_usb
 from .gigabyte_rgb_fusion2 import detect_gigabyte_rgb_fusion2
 from .msi_mystic_light import detect_msi_mystic_light
 
@@ -35,6 +36,12 @@ def detect_all(bus: SMBusInterface | None = None) -> list[RGBController]:
     if gigabyte is not None:
         log.info("  Found: %s", gigabyte.name)
         controllers.append(gigabyte)
+
+    # ASUS Aura USB (motherboard RGB)
+    aura = detect_asus_aura_usb()
+    if aura is not None:
+        log.info("  Found: %s", aura.name)
+        controllers.append(aura)
 
     # ASUS GPU RGB via NvAPI I2C
     asus = detect_asus_gpu()
