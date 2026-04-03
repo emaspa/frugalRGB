@@ -75,7 +75,7 @@ class FrugalRGBApp(ctk.CTk):
         diag_btn.pack(side="left")
 
         version_label = ctk.CTkLabel(
-            bottom_bar, text="v0.05", text_color="gray", font=ctk.CTkFont(size=11),
+            bottom_bar, text="v0.06", text_color="gray", font=ctk.CTkFont(size=11),
         )
         version_label.pack(side="right")
 
@@ -479,14 +479,34 @@ class FrugalRGBApp(ctk.CTk):
         if name in presets:
             data = presets[name]
             r, g, b = data["color"]
-            # Reset all zone dropdowns so preset applies to all LEDs/zones
-            for card, _ctrl in self._device_cards:
-                card.reset_zone()
-            self._on_color_selected(r, g, b, all_devices=True)
+
             if "effect" in data:
                 self._effect_selector.set_effect(data["effect"])
             if "speed" in data:
                 self._effect_selector.set_speed(data["speed"])
+
+            # Restore per-device state if saved, otherwise fall back to global color
+            device_states = data.get("devices", {})
+            if device_states:
+                for card, ctrl in self._device_cards:
+                    state = device_states.get(ctrl.name)
+                    if state:
+                        card.set_enabled(state.get("enabled", True))
+                        card.set_zone(state.get("zone", "All Zones"))
+                        cr, cg, cb = state.get("color", [r, g, b])
+                        card.update_color(cr, cg, cb)
+                    else:
+                        card.set_enabled(True)
+                        card.reset_zone()
+                        card.update_color(r, g, b)
+                self._current_color = (r, g, b)
+                self._update_color_display()
+            else:
+                # Legacy preset — single global color
+                for card, _ctrl in self._device_cards:
+                    card.reset_zone()
+                self._on_color_selected(r, g, b, all_devices=True)
+
             self._preset_var.set(name)
             log.info("Loaded preset: %s", name)
             self._apply()
@@ -549,10 +569,20 @@ class FrugalRGBApp(ctk.CTk):
         name = result["name"]
         if not name:
             return
+        # Capture per-device state (zone, color, enabled)
+        devices = {}
+        for card, ctrl in self._device_cards:
+            devices[ctrl.name] = {
+                "enabled": card.enabled,
+                "zone": card.selected_zone,
+                "color": list(card.current_color),
+            }
+
         presets[name] = {
             "color": list(self._current_color),
             "effect": self._effect_selector.selected_effect,
             "speed": self._effect_selector.speed,
+            "devices": devices,
         }
         try:
             with open(PRESETS_FILE, "w") as f:
