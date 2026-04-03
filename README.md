@@ -25,10 +25,9 @@ There is a **Diagnostics** button in the app that collects device info, register
 
 - **Static color** — pick any color via the color picker, preset buttons, or manual RGB entry
 - **Effects** — breathing, color cycle, rainbow, strobe — all with adjustable speed
-- **Per-device color** — untick a device to freeze its color, tick another and pick a different color; Apply sends each device its own color
-- **Per-LED DRAM color** — set different colors on individual LEDs per RAM stick via zone dropdown (All LEDs, LED 1–8)
+- **Per-zone color** — every RGB zone (Logo, Accent, D_LED1, LED 1–8, etc.) is its own card with independent color and on/off control
 - **Per-device calibration** — RGB brightness correction sliders per device to compensate for LED imbalance
-- **Presets** — save/load/overwrite/delete named presets (color + effect + speed)
+- **Presets** — save/load/overwrite/delete named presets; saves per-zone color, enabled state, effect, and speed
 - **Startup preset** — automatically apply a preset on launch
 - **System tray** — minimize to tray, close to tray, load presets from tray menu
 - **Start minimized** — launch hidden in the tray
