@@ -142,4 +142,4 @@ modules/
 
 ## License
 
-This project is provided as-is for personal use. No warranty. Use at your own risk.
+[MIT License](LICENSE)
