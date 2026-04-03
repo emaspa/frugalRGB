@@ -75,7 +75,7 @@ class FrugalRGBApp(ctk.CTk):
         diag_btn.pack(side="left")
 
         version_label = ctk.CTkLabel(
-            bottom_bar, text="v0.06", text_color="gray", font=ctk.CTkFont(size=11),
+            bottom_bar, text="v0.07", text_color="gray", font=ctk.CTkFont(size=11),
         )
         version_label.pack(side="right")
 
@@ -181,17 +181,28 @@ class FrugalRGBApp(ctk.CTk):
         )
         header.pack(pady=(12, 4))
 
-        # Device cards
+        # Device cards — one card per zone for independent control
         devices_frame = ctk.CTkScrollableFrame(self, height=120)
-        devices_frame.pack(fill="x", padx=15, pady=5)
+        devices_frame.pack(fill="both", expand=True, padx=15, pady=5)
 
-        self._device_cards: list[tuple[DeviceCard, RGBController]] = []
+        # Each entry: (card, controller, zone_id)
+        self._device_cards: list[tuple[DeviceCard, RGBController, int | None]] = []
         if self._controllers:
             for ctrl in self._controllers:
-                zone_tuples = [(z.zone_id, z.name) for z in ctrl.zones]
-                card = DeviceCard(devices_frame, ctrl.name, zone_tuples)
-                card.pack(fill="x", padx=5, pady=3)
-                self._device_cards.append((card, ctrl))
+                zones = ctrl.zones
+                if len(zones) <= 1:
+                    # Single zone — one card, no zone suffix
+                    card = DeviceCard(devices_frame, ctrl.name)
+                    card.pack(fill="x", padx=5, pady=3)
+                    zone_id = zones[0].zone_id if zones else None
+                    self._device_cards.append((card, ctrl, zone_id))
+                else:
+                    # Multiple zones — one card per zone
+                    for z in zones:
+                        label = f"{ctrl.name} — {z.name}"
+                        card = DeviceCard(devices_frame, label)
+                        card.pack(fill="x", padx=5, pady=3)
+                        self._device_cards.append((card, ctrl, z.zone_id))
         else:
             no_devices = ctk.CTkLabel(
                 devices_frame,
@@ -276,7 +287,7 @@ class FrugalRGBApp(ctk.CTk):
         self._g_var.set(str(g))
         self._b_var.set(str(b))
         self._update_color_display()
-        for card, _ctrl in self._device_cards:
+        for card, _ctrl, _zid in self._device_cards:
             if all_devices or card.enabled:
                 card.update_color(r, g, b)
 
@@ -292,21 +303,16 @@ class FrugalRGBApp(ctk.CTk):
         # Auto-apply when effect changes
         self._apply()
 
-    def _get_zone_map(self) -> dict:
-        """Return zone_map for all devices."""
-        zone_map = {}
-        for card, ctrl in self._device_cards:
-            zone_id = card.selected_zone_id
-            if zone_id is not None:
-                zone_map[id(ctrl)] = zone_id
-        return zone_map
-
-    def _get_color_map(self) -> dict:
-        """Return per-device color map from card indicators."""
-        return {id(ctrl): card.current_color for card, ctrl in self._device_cards}
+    def _get_entries(self) -> list[tuple]:
+        """Return list of (ctrl, zone_id, r, g, b) for all enabled cards."""
+        entries = []
+        for card, ctrl, zone_id in self._device_cards:
+            if card.enabled:
+                r, g, b = card.current_color
+                entries.append((ctrl, zone_id, r, g, b))
+        return entries
 
     def _apply(self) -> None:
-        r, g, b = self._current_color
         effect = self._effect_selector.selected_effect
         speed = self._effect_selector.speed
 
@@ -314,16 +320,14 @@ class FrugalRGBApp(ctk.CTk):
             self._turn_off()
             return
 
-        zone_map = self._get_zone_map()
-        color_map = self._get_color_map()
-        log.info("Applying: effect=%s color=(%d,%d,%d) speed=%.1f", effect, r, g, b, speed)
-        self._engine.start_effect(effect, r, g, b, speed,
-                                  zone_map=zone_map, color_map=color_map)
+        entries = self._get_entries()
+        log.info("Applying: effect=%s speed=%.1f entries=%d", effect, speed, len(entries))
+        self._engine.start_effect(effect, speed, entries)
 
     def _save_to_hardware(self) -> None:
         """Save current color/mode to DRAM NV flash with double confirmation."""
         saveable = [
-            (card, ctrl) for card, ctrl in self._device_cards
+            (card, ctrl) for card, ctrl, _zid in self._device_cards
             if ctrl.supports_hardware_save
         ]
         if not saveable:
@@ -445,8 +449,8 @@ class FrugalRGBApp(ctk.CTk):
 
     def _turn_off(self) -> None:
         log.info("Turning off all LEDs")
-        zone_map = self._get_zone_map()
-        self._engine.turn_off(zone_map=zone_map)
+        entries = [(ctrl, zid, 0, 0, 0) for _card, ctrl, zid in self._device_cards]
+        self._engine.turn_off(entries)
         self._on_color_selected(0, 0, 0, all_devices=True)
 
     def _load_presets_list(self) -> dict:
@@ -485,28 +489,26 @@ class FrugalRGBApp(ctk.CTk):
             if "speed" in data:
                 self._effect_selector.set_speed(data["speed"])
 
-            # Restore per-device state if saved, otherwise fall back to global color
             device_states = data.get("devices", {})
             if device_states:
-                for card, ctrl in self._device_cards:
-                    state = device_states.get(ctrl.name)
+                for card, ctrl, zone_id in self._device_cards:
+                    zones = ctrl.zones
+                    zone_name = next((z.name for z in zones if z.zone_id == zone_id), "")
+                    key = f"{ctrl.name}|{zone_name}" if len(zones) > 1 else ctrl.name
+                    state = device_states.get(key)
                     if state:
                         card.set_enabled(state.get("enabled", True))
-                        card.set_zone(state.get("zone", "All Zones"))
                         cr, cg, cb = state.get("color", [r, g, b])
                         card.update_color(cr, cg, cb)
                     else:
                         card.set_enabled(True)
-                        card.reset_zone()
                         card.update_color(r, g, b)
-                self._current_color = (r, g, b)
-                self._update_color_display()
             else:
                 # Legacy preset — single global color
-                for card, _ctrl in self._device_cards:
-                    card.reset_zone()
                 self._on_color_selected(r, g, b, all_devices=True)
 
+            self._current_color = (r, g, b)
+            self._update_color_display()
             self._preset_var.set(name)
             log.info("Loaded preset: %s", name)
             self._apply()
@@ -569,12 +571,14 @@ class FrugalRGBApp(ctk.CTk):
         name = result["name"]
         if not name:
             return
-        # Capture per-device state (zone, color, enabled)
+        # Capture per-zone state (color, enabled)
         devices = {}
-        for card, ctrl in self._device_cards:
-            devices[ctrl.name] = {
+        for card, ctrl, zone_id in self._device_cards:
+            zones = ctrl.zones
+            zone_name = next((z.name for z in zones if z.zone_id == zone_id), "")
+            key = f"{ctrl.name}|{zone_name}" if len(zones) > 1 else ctrl.name
+            devices[key] = {
                 "enabled": card.enabled,
-                "zone": card.selected_zone,
                 "color": list(card.current_color),
             }
 
@@ -621,6 +625,7 @@ class FrugalRGBApp(ctk.CTk):
                 "minimize_to_tray": self._minimize_to_tray_var.get(),
                 "start_minimized": self._start_minimized_var.get(),
                 "startup_preset": self._startup_preset_var.get(),
+                "window_geometry": self.geometry(),
             }
             with open(CONFIG_FILE, "w") as f:
                 json.dump(data, f, indent=2)
@@ -655,6 +660,8 @@ class FrugalRGBApp(ctk.CTk):
                 self._start_minimized_var.set(data["start_minimized"])
             if "startup_preset" in data:
                 self._startup_preset_var.set(data["startup_preset"])
+            if "window_geometry" in data:
+                self.geometry(data["window_geometry"])
         except Exception as e:
             log.error("Failed to load config: %s", e)
 
@@ -947,6 +954,7 @@ class FrugalRGBApp(ctk.CTk):
         self.destroy()
 
     def _quit_app(self) -> None:
+        self._save_config()
         self._engine.stop()
         if self._off_on_close_var.get():
             for ctrl in self._controllers:

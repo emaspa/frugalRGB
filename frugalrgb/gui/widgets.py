@@ -41,18 +41,11 @@ class ColorPresetBar(ctk.CTkFrame):
 
 
 class DeviceCard(ctk.CTkFrame):
-    """Card displaying a detected RGB device with zone selector."""
+    """Card displaying a single controllable RGB zone."""
 
-    def __init__(self, master, device_name: str, zones: list[tuple[int, str]], **kwargs):
-        """zones: list of (zone_id, zone_name) tuples."""
+    def __init__(self, master, label: str, **kwargs):
         super().__init__(master, corner_radius=8, **kwargs)
-        self._zone_map: dict[str, int | None] = {"All Zones": None}
-        for zone_id, zone_name in zones:
-            self._zone_map[zone_name] = zone_id
 
-        has_zones = len(zones) > 1
-
-        # Single row: checkbox + name + color indicator (+ zone dropdown if needed)
         row = ctk.CTkFrame(self, fg_color="transparent")
         row.pack(padx=10, pady=(6, 6), anchor="w")
 
@@ -63,7 +56,7 @@ class DeviceCard(ctk.CTkFrame):
         self._enable_cb.pack(side="left", padx=(0, 5))
 
         self._name_label = ctk.CTkLabel(
-            row, text=device_name, font=ctk.CTkFont(size=13, weight="bold")
+            row, text=label, font=ctk.CTkFont(size=13, weight="bold")
         )
         self._name_label.pack(side="left", padx=(0, 10))
 
@@ -72,20 +65,8 @@ class DeviceCard(ctk.CTkFrame):
         self._color_indicator.pack(side="left", padx=(0, 10))
         self._set_indicator_color(0, 0, 0)
 
-        zone_names = [name for _, name in zones]
-        if has_zones:
-            self._zone_var = ctk.StringVar(value="All Zones")
-            zone_options = ["All Zones"] + zone_names
-            self._zone_menu = ctk.CTkOptionMenu(
-                row, variable=self._zone_var, values=zone_options, width=150
-            )
-            self._zone_menu.pack(side="left")
-        else:
-            self._zone_var = ctk.StringVar(value=zone_names[0] if zone_names else "Default")
-
     def _set_indicator_color(self, r: int, g: int, b: int) -> None:
-        hex_color = f"#{r:02X}{g:02X}{b:02X}"
-        self._color_indicator.configure(fg_color=hex_color)
+        self._color_indicator.configure(fg_color=f"#{r:02X}{g:02X}{b:02X}")
 
     def update_color(self, r: int, g: int, b: int) -> None:
         self._color = (r, g, b)
@@ -96,28 +77,10 @@ class DeviceCard(ctk.CTkFrame):
         return self._color
 
     @property
-    def selected_zone(self) -> str:
-        return self._zone_var.get()
-
-    @property
-    def selected_zone_id(self) -> int | None:
-        return self._zone_map.get(self._zone_var.get())
-
-    @property
     def enabled(self) -> bool:
         return self._enabled_var.get()
 
-    def reset_zone(self) -> None:
-        """Reset zone dropdown to 'All Zones'."""
-        self._zone_var.set("All Zones")
-
-    def set_zone(self, zone_name: str) -> None:
-        """Set zone dropdown to a specific zone by name."""
-        if zone_name in self._zone_map:
-            self._zone_var.set(zone_name)
-
     def set_enabled(self, enabled: bool) -> None:
-        """Set the device enabled/disabled checkbox."""
         self._enabled_var.set(enabled)
 
 
