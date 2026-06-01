@@ -461,9 +461,31 @@ def _asus_aura_usb_detail(ctrl) -> str:
         lines.append(f"HID path: {ctrl._path}")
     lines.append(f"Product string: {getattr(ctrl, '_product_string', '?')}")
     lines.append(f"Firmware: {getattr(ctrl, '_firmware', '?')}")
+    lines.append(f"Config table read OK: {getattr(ctrl, '_config_ok', '?')}")
     lines.append("")
 
-    lines.append("Note: ASUS Aura protocol is fire-and-forget (no read responses).")
+    # Parsed per-channel device list (from the config table)
+    lines.append("--- Channels ---")
+    for i, dev in enumerate(getattr(ctrl, "_devices", [])):
+        lines.append(
+            f"  [{i}] type={dev.get('type'):11s} effect_ch={dev.get('effect')} "
+            f"direct_ch={dev.get('direct')} num_leds={dev.get('num_leds')} "
+            f"headers={dev.get('num_headers', 0)}"
+        )
+    lines.append("")
+
+    # Raw config table (re-read for the report)
+    try:
+        cfg = ctrl._read_config_table()
+        if cfg:
+            lines.append("--- Config table (60 bytes) ---")
+            for row_start in range(0, len(cfg), 12):
+                hex_str = " ".join(f"{b:02X}" for b in cfg[row_start:row_start + 12])
+                lines.append(f"  0x{row_start:02X}: {hex_str}")
+        else:
+            lines.append("--- Config table: read returned no data ---")
+    except Exception as e:
+        lines.append(f"--- Config table re-read failed: {e} ---")
     lines.append("")
 
     # Zones

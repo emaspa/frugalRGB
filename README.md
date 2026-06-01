@@ -13,7 +13,7 @@ This app was built for **my specific hardware**. It currently supports:
 | **ASRock Polychrome USB** (VID `26CE`, PID `01A2`) | USB HID | Tested on ASRock Z890M Riptide. Does **not** require admin. |
 | **MSI Mystic Light** (VID `1462`, 185-byte protocol) | USB HID | Tested on MSI MPG Z790I EDGE WIFI (PID `7E03`). Does **not** require admin. |
 | **Gigabyte RGB Fusion 2.0** (VID `048D`, ITE IT5711/IT8297) | USB HID | Tested on Gigabyte X870E Aorus Master X3D. Does **not** require admin. |
-| **ASUS Aura USB** (VID `0B05`) | USB HID | Tested on ASUS motherboards (PID `19AF`). Does **not** require admin. |
+| **ASUS Aura USB** (VID `0B05`) | USB HID | Mainboard protocol — onboard RGB + addressable headers, auto-detected from the device config table (PIDs `19AF`/`1939`/`18F3`). Does **not** require admin. |
 | **ASUS GPU RGB** (ENE controller at I2C `0x67`) | NvAPI I2C | Tested on ASUS TUF RTX 5090. Does **not** require admin. NVIDIA GPU only. |
 | **ENE AUDA-series DDR5 DRAM RGB** (addresses `0x70`–`0x77`) | SMBus (i801/PIIX4) | Tested with KLEVV DDR5 RGB. **Requires admin** (kernel-level SMBus access). Supports Intel (i801) and AMD (PIIX4) chipsets. |
 
@@ -102,7 +102,7 @@ This applies the configured startup preset and exits immediately — no window, 
 
 ### Save to Hardware warning
 
-The **Save to Hardware** button writes the current color and mode to the device's non-volatile flash memory, so it persists across power cycles — before Windows even loads. Supported on ENE DRAM and Gigabyte RGB Fusion 2.0 controllers.
+The **Save to Hardware** button writes the current color and mode to the device's non-volatile flash memory, so it persists across power cycles — before Windows even loads. Supported on ENE DRAM, Gigabyte RGB Fusion 2.0, and ASUS Aura mainboard controllers.
 
 > **Use at your own risk.** This operation is known to be unstable on some ENE firmware versions. In rare cases it can soft-lock the RGB controller, making the LEDs unresponsive. Recovery typically requires physically reseating the DIMM. OpenRGB disables this feature by default for the same reason.
 >

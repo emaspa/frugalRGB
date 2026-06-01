@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 
 import customtkinter as ctk
 import pystray
@@ -12,6 +13,7 @@ from CTkColorPicker import AskColor
 from PIL import Image, ImageDraw, ImageFilter
 
 from ..controllers.base import RGBController, RGBMode
+from ..controllers.asus_aura_usb import AsusAuraUSBController
 from ..diagnostics import collect_diagnostics
 from ..effects.engine import EffectEngine
 from .widgets import CalibrationPanel, ColorPresetBar, DeviceCard, EffectSelector
@@ -74,8 +76,15 @@ class FrugalRGBApp(ctk.CTk):
         )
         diag_btn.pack(side="left")
 
+        aura_btn = ctk.CTkButton(
+            bottom_bar, text="Aura Test", width=80, height=24,
+            font=ctk.CTkFont(size=11), fg_color="gray30", hover_color="gray40",
+            command=self._run_aura_test,
+        )
+        aura_btn.pack(side="left", padx=(6, 0))
+
         version_label = ctk.CTkLabel(
-            bottom_bar, text="v0.07", text_color="gray", font=ctk.CTkFont(size=11),
+            bottom_bar, text="v0.08", text_color="gray", font=ctk.CTkFont(size=11),
         )
         version_label.pack(side="right")
 
@@ -947,6 +956,91 @@ class FrugalRGBApp(ctk.CTk):
             )
 
         threading.Thread(target=_collect, daemon=True).start()
+
+    def _run_aura_test(self) -> None:
+        """Open a dialog that shows the ASUS Aura controller info and cycles its
+        LEDs through R/G/B/White so detection and protocol can be verified."""
+        aura = next(
+            (c for c in self._controllers if isinstance(c, AsusAuraUSBController)),
+            None,
+        )
+
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("ASUS Aura Test")
+        dialog.resizable(False, False)
+        dw, dh = 420, 250
+        x = self.winfo_x() + self.winfo_width() // 2 - dw // 2
+        y = self.winfo_y() + self.winfo_height() // 2 - dh // 2
+        dialog.geometry(f"{dw}x{dh}+{x}+{y}")
+        dialog.transient(self)
+        dialog.grab_set()
+
+        if aura is None:
+            ctk.CTkLabel(
+                dialog,
+                text=("No ASUS Aura controller detected.\n\n"
+                      "If your board has ASUS Aura RGB, close Armoury Crate /\n"
+                      "ASUS LightingService and restart frugalRGB. You can also\n"
+                      "run test_asus_aura.py from a terminal for a raw scan."),
+                justify="left", wraplength=380,
+            ).pack(expand=True, padx=20, pady=(18, 8))
+            ctk.CTkButton(dialog, text="Close", width=80,
+                          command=dialog.destroy).pack(pady=(0, 12))
+            return
+
+        onboard = sum(d["num_leds"] for d in aura._devices
+                      if d["type"] == "fixed")
+        n_addr = sum(1 for d in aura._devices if d["type"] == "addressable")
+        info = (
+            f"{aura.name}\n"
+            f"Firmware: {aura._firmware}\n"
+            f"Config table read OK: {aura._config_ok}\n"
+            f"Onboard LEDs: {onboard}    Addressable headers: {n_addr}\n"
+            f"Zones: {len(aura.zones)}"
+        )
+        ctk.CTkLabel(dialog, text=info, justify="left", wraplength=390,
+                     font=ctk.CTkFont(size=12)).pack(padx=20, pady=(16, 6))
+
+        status_label = ctk.CTkLabel(dialog, text="Idle", text_color="gray")
+        status_label.pack(pady=(2, 8))
+
+        btn_row = ctk.CTkFrame(dialog, fg_color="transparent")
+        btn_row.pack(pady=(0, 12))
+
+        def _set_status(text: str) -> None:
+            self.after(0, lambda: status_label.configure(text=text))
+
+        def _worker():
+            sequence = [
+                ("Red", (255, 0, 0)), ("Green", (0, 255, 0)),
+                ("Blue", (0, 0, 255)), ("White", (255, 255, 255)),
+            ]
+            try:
+                for name, (r, g, b) in sequence:
+                    _set_status(f"Showing: {name}")
+                    aura.set_mode(RGBMode.STATIC)
+                    aura.set_color(r, g, b, zone=0)
+                    aura.apply()
+                    time.sleep(1.3)
+                _set_status("Done — restoring current colors.")
+                self.after(0, self._apply)
+            except Exception as e:
+                log.error("Aura test failed: %s", e)
+                _set_status(f"Error: {e}")
+            finally:
+                self.after(0, lambda: start_btn.configure(state="normal"))
+
+        def _start():
+            start_btn.configure(state="disabled")
+            # Stop the effect loop so it doesn't fight the test for the device.
+            self._engine.stop()
+            threading.Thread(target=_worker, daemon=True).start()
+
+        start_btn = ctk.CTkButton(btn_row, text="Run R/G/B Test", width=130,
+                                  command=_start)
+        start_btn.pack(side="left", padx=(0, 8))
+        ctk.CTkButton(btn_row, text="Close", width=80, fg_color="gray30",
+                      hover_color="gray40", command=dialog.destroy).pack(side="left")
 
     def _apply_quit_exit(self) -> None:
         """Exit after --apply-quit: stop engine but keep LEDs on."""
