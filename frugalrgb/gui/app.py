@@ -84,7 +84,7 @@ class FrugalRGBApp(ctk.CTk):
         aura_btn.pack(side="left", padx=(6, 0))
 
         version_label = ctk.CTkLabel(
-            bottom_bar, text="v0.08", text_color="gray", font=ctk.CTkFont(size=11),
+            bottom_bar, text="v0.09", text_color="gray", font=ctk.CTkFont(size=11),
         )
         version_label.pack(side="right")
 

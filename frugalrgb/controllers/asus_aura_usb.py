@@ -78,9 +78,19 @@ AURA_MODE_MAP = {
 }
 
 # Modes the hardware animates on its own (the software effect loop leaves these
-# to the device instead of streaming frames).
+# to the device instead of streaming frames). Spectrum-cycle and rainbow need no
+# colour and the firmware animates them nicely across addressable strips, so we
+# keep them in hardware. Breathing and flashing are colour effects: the firmware
+# can only apply them to the onboard LEDs, not addressable headers (OpenRGB has
+# the same limitation), so we render those in software via direct mode instead.
 HARDWARE_ANIMATED_MODES = {
-    RGBMode.BREATHING, RGBMode.STROBE, RGBMode.COLOR_CYCLE, RGBMode.RAINBOW,
+    RGBMode.COLOR_CYCLE, RGBMode.RAINBOW,
+}
+
+# Software-animated colour effects: the effect engine streams brightness/on-off
+# modulated colours and we paint each frame as a direct-mode frame.
+SOFTWARE_ANIMATED_MODES = {
+    RGBMode.BREATHING, RGBMode.STROBE,
 }
 
 # Device types within the config table
@@ -109,6 +119,9 @@ class AsusAuraUSBController(RGBController):
         self._pending_colors: dict[int, tuple[int, int, int]] = {}
         # last colours actually committed to the device (for save-to-hardware)
         self._applied_colors: dict[int, tuple[int, int, int]] = {}
+        # whether the channels have been switched into direct mode for the
+        # current software-animated effect (armed once, then we only stream LEDs)
+        self._direct_armed = False
         # list of dicts: effect, direct, num_leds, start_led, type
         self._devices: list[dict] = []
 
@@ -344,18 +357,43 @@ class AsusAuraUSBController(RGBController):
 
     def set_mode(self, mode: RGBMode, speed: int = 3) -> None:
         # Aura mainboard effects carry no speed field; speed is stored for parity
-        # but not transmitted.
+        # but not transmitted. Changing mode re-arms the direct-mode handshake.
+        if mode != self._current_mode:
+            self._direct_armed = False
         self._current_mode = mode
         self._current_speed = speed
 
     def apply(self) -> None:
         if not self._pending_colors:
             return
-        mode_val = AURA_MODE_MAP.get(self._current_mode, AURA_MODE_STATIC)
-        self._apply_channels(self._pending_colors, mode_val, shutdown=False)
-        self._send_commit()
+        if self._current_mode in SOFTWARE_ANIMATED_MODES:
+            # Breathing/strobe are driven by the effect engine, which streams a
+            # brightness/on-off modulated colour ~30x/sec. Paint each frame as a
+            # direct-mode frame (works on both onboard and addressable strips).
+            # No commit here — that's a flash write and must not run per frame.
+            self._render_direct(self._pending_colors)
+        else:
+            mode_val = AURA_MODE_MAP.get(self._current_mode, AURA_MODE_STATIC)
+            self._direct_armed = False
+            self._apply_channels(self._pending_colors, mode_val, shutdown=False)
+            self._send_commit()
         self._applied_colors.update(self._pending_colors)
         self._pending_colors.clear()
+
+    def _render_direct(self, colors: dict[int, tuple[int, int, int]]) -> None:
+        """Paint a single frame on every channel using direct (0xFF) mode.
+
+        The direct-mode handshake (one effect packet per channel) is sent only
+        once per effect; subsequent frames just stream LED data. This mirrors
+        OpenRGB's direct path and is how addressable headers are animated.
+        """
+        if not self._direct_armed:
+            for ch_idx in colors:
+                self._send_effect(self._devices[ch_idx]["effect"], AURA_MODE_DIRECT)
+            self._direct_armed = True
+        for ch_idx, rgb in colors.items():
+            dev = self._devices[ch_idx]
+            self._send_direct(dev["direct"], [rgb] * dev["num_leds"])
 
     def _apply_channels(self, colors: dict[int, tuple[int, int, int]],
                         mode_val: int, shutdown: bool) -> None:
@@ -378,12 +416,18 @@ class AsusAuraUSBController(RGBController):
 
     def save_to_hardware(self) -> None:
         """Persist the current colour/mode so it survives a power cycle."""
-        mode_val = AURA_MODE_MAP.get(self._current_mode, AURA_MODE_STATIC)
+        mode = self._current_mode
+        # Software-animated effects can't be stored in the device — persist the
+        # last shown colour as a static boot colour instead.
+        if mode in SOFTWARE_ANIMATED_MODES:
+            mode = RGBMode.STATIC
+        mode_val = AURA_MODE_MAP.get(mode, AURA_MODE_STATIC)
         # Re-apply the last committed colours with the shutdown/save flag set so
         # the device stores them as the boot effect, then commit.
         colors = self._pending_colors or self._applied_colors
         if not colors:
             return
+        self._direct_armed = False
         self._apply_channels(dict(colors), mode_val, shutdown=True)
         self._send_commit()
 
