@@ -63,22 +63,30 @@ def main() -> None:
     if sys.platform == "win32":
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("frugalrgb")
 
-    if not check_admin():
+    # Initialize SMBus (optional — needed for DRAM RGB, not for USB devices).
+    # On Windows the kernel driver requires Administrator, so don't even try
+    # without it. On Linux what matters is /dev/i2c-* access (root OR i2c
+    # group membership), so always attempt and fall back on failure.
+    bus = None
+    if sys.platform == "win32" and not check_admin():
         log.warning(
             "Not running as Administrator. SMBus devices (RAM RGB) won't be available. "
             "USB devices (motherboard RGB) may still work."
         )
-
-    # Initialize SMBus (optional — needed for DRAM RGB, not for USB devices)
-    bus = None
-    if check_admin():
+    else:
         try:
             from frugalrgb.smbus import get_smbus
             log.info("Initializing SMBus...")
             bus = get_smbus()
             bus.open()
         except Exception as e:
-            log.warning("SMBus init failed (DRAM RGB unavailable): %s", e)
+            if sys.platform != "win32":
+                log.warning(
+                    "SMBus init failed (DRAM RGB unavailable): %s — "
+                    "add your user to the 'i2c' group or run as root.", e
+                )
+            else:
+                log.warning("SMBus init failed (DRAM RGB unavailable): %s", e)
             bus = None
 
     # Detect devices (both USB HID and SMBus)
