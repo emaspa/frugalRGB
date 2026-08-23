@@ -36,7 +36,11 @@ def _check_single_instance() -> bool:
     else:
         import fcntl
         import os
+        import tempfile
         lock_path = os.path.join(tempfile.gettempdir(), "frugalrgb.lock")
+        # Keep a module-level reference so the fd (and its flock) survives
+        # this function returning.
+        global _lock_file
         _lock_file = open(lock_path, "w")
         try:
             fcntl.flock(_lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
