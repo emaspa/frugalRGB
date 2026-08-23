@@ -323,10 +323,14 @@ def detect_gigabyte_rgb_fusion2() -> GigabyteRGBFusion2Controller | None:
         usage = dev_info.get("usage", 0)
         product = dev_info.get("product_string", "") or ""
 
-        # Match by HID usage (0xFF89:0xCC) or known PID with interface 0
+        # Match by HID usage (0xFF89:0xCC) or known PID. Don't filter on
+        # interface number: Windows exposes the RGB collection on interface 0,
+        # but hidapi's libusb backend reports no usage info and the feature
+        # reports may only answer on another interface (IT5711: interface 1).
+        # The 0x60 info-read below verifies each candidate.
         if usage_page == 0xFF89 and usage == 0xCC:
             pass
-        elif pid in KNOWN_PIDS and dev_info.get("interface_number", -1) == 0:
+        elif pid in KNOWN_PIDS:
             pass
         else:
             continue
@@ -368,7 +372,9 @@ def detect_gigabyte_rgb_fusion2() -> GigabyteRGBFusion2Controller | None:
             return GigabyteRGBFusion2Controller(dev, path_str, pid, product)
 
         except Exception as e:
-            log.warning("Failed to open Gigabyte RGB (PID=0x%04X): %s", pid, e)
+            # Expected for non-RGB interfaces of a known PID — keep probing.
+            log.debug("Gigabyte RGB candidate %s (PID=0x%04X) rejected: %s",
+                      path_str, pid, e)
             continue
 
     return None
