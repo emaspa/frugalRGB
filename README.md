@@ -31,7 +31,7 @@ There is a **Diagnostics** button in the app that collects device info, register
 - **Startup preset** — automatically apply a preset on launch
 - **System tray** — minimize to tray, close to tray, load presets from tray menu
 - **Start minimized** — launch hidden in the tray
-- **Start at login** — when running as Administrator, creates a Windows scheduled task that launches the app at login with elevated privileges and no UAC prompt; when running without admin, creates a standard startup shortcut (note: Windows Defender may also flag the scheduled task creation — see [Windows Defender](#pre-built-exe-windows) note above)
+- **Start at login** — when running as Administrator, creates a Windows scheduled task that launches the app at login with elevated privileges and no UAC prompt; when running without admin, creates a standard startup shortcut (note: Windows Defender may also flag the scheduled task creation — see [Windows Defender](#pre-built-exe-windows) note above); on Linux, creates an XDG autostart entry in `~/.config/autostart/`
 - **`--apply-quit` mode** — apply the startup preset and exit immediately (saves RAM for always-on setups)
 - **Save to Hardware** — write the current color/mode to the DRAM controller's non-volatile flash so it persists across power cycles (boot color). See [warning below](#save-to-hardware-warning)
 - **Diagnostics** — collect system info, USB HID enumeration, SMBus scan, device register dumps, and config files into a zip for troubleshooting (run as admin to include SMBus/RAM data)

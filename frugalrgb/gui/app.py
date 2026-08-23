@@ -87,7 +87,7 @@ class FrugalRGBApp(ctk.CTk):
         aura_btn.pack(side="left", padx=(6, 0))
 
         version_label = ctk.CTkLabel(
-            bottom_bar, text="v0.2.0", text_color="gray", font=ctk.CTkFont(size=11),
+            bottom_bar, text="v0.2.1", text_color="gray", font=ctk.CTkFont(size=11),
             height=24,
         )
         version_label.pack(side="right", padx=(0, 10))
@@ -742,11 +742,14 @@ class FrugalRGBApp(ctk.CTk):
 
     @staticmethod
     def _startup_shortcut_path() -> str:
-        startup = os.path.join(
-            os.environ.get("APPDATA", ""),
-            "Microsoft", "Windows", "Start Menu", "Programs", "Startup",
-        )
-        return os.path.join(startup, "frugalRGB.lnk")
+        if sys.platform == "win32":
+            startup = os.path.join(
+                os.environ.get("APPDATA", ""),
+                "Microsoft", "Windows", "Start Menu", "Programs", "Startup",
+            )
+            return os.path.join(startup, "frugalRGB.lnk")
+        config_home = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+        return os.path.join(config_home, "autostart", "frugalrgb.desktop")
 
     def _startup_shortcut_exists(self) -> bool:
         return os.path.exists(self._startup_shortcut_path())
@@ -790,8 +793,33 @@ class FrugalRGBApp(ctk.CTk):
         return False
 
     def _create_startup_shortcut(self) -> None:
-        """Create a .lnk in the Startup folder."""
+        """Create a startup entry (.lnk on Windows, XDG autostart on Linux)."""
         lnk = self._startup_shortcut_path()
+
+        if sys.platform != "win32":
+            import shutil
+            main_pyw = os.path.normpath(os.path.join(
+                os.path.dirname(os.path.abspath(__file__)), "..", "..", "main.pyw",
+            ))
+            if main_pyw.startswith("/usr/lib/frugalrgb") and shutil.which("frugalrgb"):
+                exec_cmd = "frugalrgb"
+            else:
+                exec_cmd = f"{sys.executable} {main_pyw}"
+            try:
+                os.makedirs(os.path.dirname(lnk), exist_ok=True)
+                with open(lnk, "w") as f:
+                    f.write(
+                        "[Desktop Entry]\n"
+                        "Type=Application\n"
+                        "Name=frugalRGB\n"
+                        f"Exec={exec_cmd}\n"
+                        "Icon=frugalrgb\n"
+                        "X-GNOME-Autostart-enabled=true\n"
+                    )
+                log.info("Created autostart entry: %s", lnk)
+            except OSError as e:
+                log.error("Failed to create autostart entry: %s", e)
+            return
 
         if self._ensure_scheduled_task():
             target = "schtasks.exe"
