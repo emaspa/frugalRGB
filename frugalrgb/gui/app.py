@@ -67,7 +67,9 @@ class FrugalRGBApp(ctk.CTk):
 
         # Bottom bar (diagnostics + version)
         bottom_bar = ctk.CTkFrame(self, fg_color="transparent")
-        bottom_bar.pack(side="bottom", fill="x", padx=10, pady=(0, 4))
+        # Extra bottom/right margin keeps the version label clear of the
+        # rounded window corners some compositors draw (KDE on Wayland).
+        bottom_bar.pack(side="bottom", fill="x", padx=10, pady=(0, 8))
 
         diag_btn = ctk.CTkButton(
             bottom_bar, text="Diagnostics", width=90, height=24,
@@ -87,7 +89,7 @@ class FrugalRGBApp(ctk.CTk):
             bottom_bar, text="v0.1.0", text_color="gray", font=ctk.CTkFont(size=11),
             height=24,
         )
-        version_label.pack(side="right")
+        version_label.pack(side="right", padx=(0, 10))
 
         # Presets row
         preset_frame = ctk.CTkFrame(self, fg_color="transparent")
