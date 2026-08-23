@@ -731,16 +731,27 @@ class FrugalRGBApp(ctk.CTk):
         return img
 
     def _set_window_icon(self) -> None:
-        """Set the taskbar/window icon via Win32 API."""
-        self._ico_path = os.path.join(tempfile.gettempdir(), "frugalrgb_icon.ico")
-        sizes = [(16, 16), (32, 32), (48, 48), (256, 256)]
-        self._app_icon.save(self._ico_path, format="ICO", sizes=sizes)
-        try:
-            self.iconbitmap(self._ico_path)
-        except Exception:
-            pass
-        # Force icon via SendMessage WM_SETICON after window is mapped
-        self.after(50, self._apply_win32_icon)
+        """Set the taskbar/window icon."""
+        if sys.platform == "win32":
+            self._ico_path = os.path.join(tempfile.gettempdir(), "frugalrgb_icon.ico")
+            sizes = [(16, 16), (32, 32), (48, 48), (256, 256)]
+            self._app_icon.save(self._ico_path, format="ICO", sizes=sizes)
+            try:
+                self.iconbitmap(self._ico_path)
+            except Exception:
+                pass
+            # Force icon via SendMessage WM_SETICON after window is mapped
+            self.after(50, self._apply_win32_icon)
+        else:
+            # Tk on Linux wants a PhotoImage, not an .ico
+            png_path = os.path.join(tempfile.gettempdir(), "frugalrgb_icon.png")
+            self._app_icon.save(png_path, format="PNG")
+            try:
+                import tkinter as tk
+                self._icon_photo = tk.PhotoImage(file=png_path)  # keep a reference
+                self.iconphoto(True, self._icon_photo)
+            except Exception:
+                pass
 
     def _apply_win32_icon(self) -> None:
         """Use Win32 SendMessage to force taskbar icon."""
@@ -876,8 +887,16 @@ class FrugalRGBApp(ctk.CTk):
         )
 
     def _init_tray(self) -> None:
+        tray_image = self._app_icon
+        if sys.platform != "win32":
+            # KDE's xembedsniproxy chroma-keys legacy X11 tray icons with pure
+            # green, so transparent pixels render as a green square. Flatten
+            # onto an opaque dark tile so there is no transparency to key out.
+            bg = Image.new("RGBA", tray_image.size, (30, 30, 30, 255))
+            bg.alpha_composite(tray_image)
+            tray_image = bg.convert("RGB")
         self._tray_icon = pystray.Icon(
-            "frugalRGB", self._app_icon, "frugalRGB",
+            "frugalRGB", tray_image, "frugalRGB",
             self._build_tray_menu(),
         )
         threading.Thread(target=self._tray_icon.run, daemon=True).start()
