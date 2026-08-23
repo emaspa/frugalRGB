@@ -36,7 +36,7 @@ There is a **Diagnostics** button in the app that collects device info, register
 - **Save to Hardware** — write the current color/mode to the DRAM controller's non-volatile flash so it persists across power cycles (boot color). See [warning below](#save-to-hardware-warning)
 - **Diagnostics** — collect system info, USB HID enumeration, SMBus scan, device register dumps, and config files into a zip for troubleshooting (run as admin to include SMBus/RAM data)
 - **Aura Test** — for ASUS Aura boards, shows the detected controller's firmware and zone layout and cycles the LEDs through red/green/blue/white to confirm lighting is working
-- **Cross-platform** — runs on Windows (PawnIO driver) and Linux (hidapi + smbus2), see [Linux](#linux-from-source) for setup
+- **Cross-platform** — runs on Windows (PawnIO driver) and Linux (hidapi + smbus2), see [Linux](#linux-from-source) for setup. Linux support is only tested on CachyOS (Arch-based); other distributions should work but are untested.
 - **Single instance** — prevents duplicate instances with a friendly notification
 
 ## Installation
@@ -83,11 +83,11 @@ pythonw main.pyw
 yay -S frugalrgb
 ```
 
-Installs the app, the udev rules, a desktop entry, and the kernel module autoload config. After installing: add your user to the `i2c` group for DRAM RGB, and on boards whose BIOS claims the SMBus (most Gigabyte boards) boot with `acpi_enforce_resources=lax` (details in the Linux section below). The PKGBUILD lives in [`aur/`](aur/).
+Installs [frugalrgb from the AUR](https://aur.archlinux.org/packages/frugalrgb): the app, the udev rules, a desktop entry, and the kernel module autoload config. After installing: add your user to the `i2c` group for DRAM RGB, and on boards whose BIOS claims the SMBus (most Gigabyte boards) boot with `acpi_enforce_resources=lax` (details in the Linux section below). The PKGBUILD lives in [`aur/`](aur/).
 
 ### Linux (from source)
 
-Tested on Arch (CachyOS) with the Gigabyte X870E Aorus Master X3D and the KLEVV DDR5 kit above.
+Linux support is only tested on CachyOS (Arch-based), with the Gigabyte X870E Aorus Master X3D, the KLEVV DDR5 kit, and the TUF RTX 5090 above. Other distributions should work but are untested; the package names below are for Arch with Debian/Ubuntu equivalents in comments.
 
 Install dependencies. The GUI needs Tk, and most distros block `pip install` into the system Python, so use a venv:
 
