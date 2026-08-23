@@ -1,0 +1,39 @@
+# udev rules for frugalRGB — grant the locally logged-in user access to
+# supported RGB controllers (TAG+="uaccess" sets an ACL for the active seat).
+#
+# Each device gets two rules: the usb device node (for hidapi builds using the
+# libusb backend — e.g. PyPI wheels) and the hidraw node (for hidraw builds).
+# The file MUST sort before 73-seat-late.rules or the uaccess tag is ignored.
+#
+# Install: copy to /etc/udev/rules.d/ (or /usr/lib/udev/rules.d/ when packaged),
+# then: udevadm control --reload && udevadm trigger
+#
+# The ASUS GPU controller uses NvAPI and is Windows-only — no rule needed.
+
+# ASRock Polychrome USB
+SUBSYSTEM=="usb", ATTR{idVendor}=="26ce", ATTR{idProduct}=="01a2", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="26ce", ATTRS{idProduct}=="01a2", TAG+="uaccess"
+
+# MSI Mystic Light (detection matches by product string across the vendor ID,
+# so the rule is VID-wide to mirror it)
+SUBSYSTEM=="usb", ATTR{idVendor}=="1462", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1462", TAG+="uaccess"
+
+# Gigabyte RGB Fusion 2.0 (ITE chips)
+SUBSYSTEM=="usb", ATTR{idVendor}=="048d", ATTR{idProduct}=="8297", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="048d", ATTR{idProduct}=="8950", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="048d", ATTR{idProduct}=="5702", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="048d", ATTR{idProduct}=="5711", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="048d", ATTRS{idProduct}=="8297", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="048d", ATTRS{idProduct}=="8950", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="048d", ATTRS{idProduct}=="5702", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="048d", ATTRS{idProduct}=="5711", TAG+="uaccess"
+
+# ASUS Aura USB (mainboard)
+SUBSYSTEM=="usb", ATTR{idVendor}=="0b05", ATTR{idProduct}=="19af", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0b05", ATTRS{idProduct}=="19af", TAG+="uaccess"
+# Experimental Aura PIDs
+SUBSYSTEM=="usb", ATTR{idVendor}=="0b05", ATTR{idProduct}=="1939", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="0b05", ATTR{idProduct}=="18f3", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0b05", ATTRS{idProduct}=="1939", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0b05", ATTRS{idProduct}=="18f3", TAG+="uaccess"

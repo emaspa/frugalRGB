@@ -84,7 +84,7 @@ class FrugalRGBApp(ctk.CTk):
         aura_btn.pack(side="left", padx=(6, 0))
 
         version_label = ctk.CTkLabel(
-            bottom_bar, text="v0.09", text_color="gray", font=ctk.CTkFont(size=11),
+            bottom_bar, text="v0.1.0", text_color="gray", font=ctk.CTkFont(size=11),
         )
         version_label.pack(side="right")
 
@@ -213,9 +213,16 @@ class FrugalRGBApp(ctk.CTk):
                         card.pack(fill="x", padx=5, pady=3)
                         self._device_cards.append((card, ctrl, z.zone_id))
         else:
+            if sys.platform == "win32":
+                no_devices_hint = "Make sure you're running as Administrator."
+            else:
+                no_devices_hint = (
+                    "Install the udev rules (70-frugalrgb.rules) for USB devices\n"
+                    "and join the 'i2c' group for DRAM RGB."
+                )
             no_devices = ctk.CTkLabel(
                 devices_frame,
-                text="No RGB devices detected.\nMake sure you're running as Administrator/root.",
+                text=f"No RGB devices detected.\n{no_devices_hint}",
                 text_color="gray",
             )
             no_devices.pack(pady=20)
