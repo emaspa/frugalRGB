@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=frugalRGB
+GenericName=RGB Controller
+Comment=no bloat, just LEDs
+Exec=frugalrgb
+Icon=frugalrgb
+Terminal=false
+Categories=Utility;Settings;HardwareSettings;
+Keywords=RGB;LED;lighting;
