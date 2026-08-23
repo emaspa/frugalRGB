@@ -196,8 +196,69 @@ def _read_ene_name(bus, addr: int) -> str | None:
     return "".join(chars) if len(chars) >= 4 else None
 
 
+def _detect_linux() -> ASUSGPUController | None:
+    """Detect via the GPU I2C adapters the NVIDIA driver exposes as i2c-dev.
+
+    The adapter named "NVIDIA i2c adapter 1" is the same port NvAPI calls
+    port 1 on Windows; probe every NVIDIA adapter of an ASUS-subsystem GPU
+    and verify by reading the ENE device name.
+    """
+    import glob
+    import os
+
+    from ..smbus.linux import LinuxSMBus
+
+    for path in sorted(glob.glob("/sys/bus/i2c/devices/i2c-*")):
+        try:
+            with open(path + "/name") as f:
+                adapter_name = f.read().strip()
+            num = int(path.rsplit("i2c-", 1)[1])
+        except (OSError, ValueError):
+            continue
+        if not adapter_name.startswith("NVIDIA i2c adapter"):
+            continue
+
+        pci = os.path.dirname(os.path.realpath(path))
+        try:
+            with open(os.path.join(pci, "subsystem_vendor")) as f:
+                sub_ven = int(f.read(), 16)
+            with open(os.path.join(pci, "subsystem_device")) as f:
+                sub_dev = int(f.read(), 16)
+        except (OSError, ValueError):
+            continue
+        if sub_ven != ASUS_SUB_VEN:
+            continue
+
+        bus = LinuxSMBus(num)
+        try:
+            bus.open()
+        except Exception as e:
+            log.debug("Cannot open i2c-%d (%s): %s", num, adapter_name, e)
+            continue
+
+        ene_name = _read_ene_name(bus, ENE_ADDR)
+        if ene_name is None:
+            bus.close()
+            continue
+
+        subsys_name = KNOWN_SUBSYS.get(sub_dev, "")
+        gpu_name = f"NVIDIA GPU {os.path.basename(pci)}"
+        log.info("ASUS GPU found: %s (subsys 0x%04X:0x%04X) %s on i2c-%d",
+                 gpu_name, sub_ven, sub_dev, subsys_name, num)
+        log.info("Found ENE GPU RGB controller: %s", ene_name)
+        return ASUSGPUController(bus, gpu_name, subsys_name, ene_name)
+
+    return None
+
+
 def detect_asus_gpu() -> ASUSGPUController | None:
-    """Detect ASUS GPU RGB controller via NvAPI I2C."""
+    """Detect ASUS GPU RGB controller (NvAPI on Windows, i2c-dev on Linux)."""
+    if sys.platform == "linux":
+        try:
+            return _detect_linux()
+        except Exception as e:
+            log.debug("Linux GPU I2C detection failed: %s", e)
+            return None
     if sys.platform != "win32":
         return None
 
