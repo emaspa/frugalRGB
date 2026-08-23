@@ -110,6 +110,15 @@ sudo modprobe i2c-piix4
 
 On many boards (Gigabyte in particular) the BIOS claims the SMBus region for itself and the kernel then refuses to bind the driver: `dmesg` shows `ACPI Warning: SystemIO range ... conflicts with OpRegion`. Boot with the kernel parameter `acpi_enforce_resources=lax` to allow it. This is the same access pattern RGB tools rely on under Windows, where no such check exists; OpenRGB documents the same parameter for DRAM RGB.
 
+**System tray icon**: for a proper transparent tray icon, pystray needs its appindicator backend (the native StatusNotifier protocol on KDE and GNOME). Install PyGObject and the Ayatana appindicator library, and let the venv see system packages:
+
+```bash
+sudo pacman -S python-gobject libayatana-appindicator    # Debian/Ubuntu: python3-gi gir1.2-ayatanaappindicator3-0.1
+python -m venv --system-site-packages .venv    # or set include-system-site-packages = true in .venv/pyvenv.cfg
+```
+
+Without these, pystray falls back to its legacy X11 backend. The app still works and flattens the tray icon onto a dark tile (KDE's xembed proxy would otherwise render transparency as a green square), but the icon loses transparency.
+
 Run with:
 
 ```bash

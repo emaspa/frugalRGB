@@ -888,10 +888,11 @@ class FrugalRGBApp(ctk.CTk):
 
     def _init_tray(self) -> None:
         tray_image = self._app_icon
-        if sys.platform != "win32":
+        if pystray.Icon.__module__ == "pystray._xorg":
             # KDE's xembedsniproxy chroma-keys legacy X11 tray icons with pure
             # green, so transparent pixels render as a green square. Flatten
             # onto an opaque dark tile so there is no transparency to key out.
+            # The appindicator/gtk backends handle transparency natively.
             bg = Image.new("RGBA", tray_image.size, (30, 30, 30, 255))
             bg.alpha_composite(tray_image)
             tray_image = bg.convert("RGB")
