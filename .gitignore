@@ -7,3 +7,7 @@ dist/
 *.ico
 .claude/
 *.egg-info/
+aur/src/
+aur/pkg/
+aur/*.tar.gz
+aur/*.pkg.tar.zst
