@@ -79,11 +79,46 @@ pythonw main.pyw
 
 ### Arch Linux (AUR)
 
+**1. Install** [frugalrgb from the AUR](https://aur.archlinux.org/packages/frugalrgb) (the PKGBUILD lives in [`aur/`](aur/)):
+
 ```bash
 yay -S frugalrgb
 ```
 
-Installs [frugalrgb from the AUR](https://aur.archlinux.org/packages/frugalrgb): the app, the udev rules, a desktop entry, and the kernel module autoload config. After installing: add your user to the `i2c` group for DRAM RGB, and on boards whose BIOS claims the SMBus (most Gigabyte boards) boot with `acpi_enforce_resources=lax` (details in the Linux section below). The PKGBUILD lives in [`aur/`](aur/).
+This installs the app (`frugalrgb` command + application menu entry), the udev rules for USB RGB access, and autoload config for the SMBus kernel modules (`i2c-dev`, `i2c-piix4`, `i2c-i801`).
+
+**2. Activate device access** (first install only; a reboot does the same):
+
+```bash
+sudo udevadm trigger                        # apply the udev rules without replugging
+sudo modprobe i2c-dev i2c-piix4 i2c-i801    # load the SMBus modules without rebooting
+```
+
+Loading the wrong chipset's module is harmless; it simply won't bind.
+
+**3. Join the `i2c` group** (needed for DRAM RGB and GPU RGB):
+
+```bash
+sudo usermod -aG i2c $USER
+```
+
+Then log out and back in for the group to take effect.
+
+**4. Gigabyte boards only, for DRAM RGB:** the BIOS claims the SMBus region and the kernel refuses to bind the driver (`dmesg` shows `ACPI Warning: SystemIO range ... conflicts with OpRegion`). Add the kernel parameter `acpi_enforce_resources=lax` and reboot:
+
+- **GRUB**: append it to `GRUB_CMDLINE_LINUX_DEFAULT` in `/etc/default/grub`, then `sudo grub-mkconfig -o /boot/grub/grub.cfg`
+- **systemd-boot**: append it to the `options` line of your entry in `/boot/loader/entries/`
+- **Limine (CachyOS)**: add `KERNEL_CMDLINE[default]+=" acpi_enforce_resources=lax"` to `/etc/default/limine`, then `sudo limine-update`
+
+This is the same access pattern RGB tools rely on under Windows, where no such check exists; OpenRGB documents the same parameter. Skip this step if you don't need DRAM RGB.
+
+**5. Optional, transparent tray icon:** the tray needs pystray's appindicator backend, or the icon falls back to an opaque tile:
+
+```bash
+sudo pacman -S python-gobject libayatana-appindicator
+```
+
+**6. Run** `frugalrgb` from a terminal, or launch **frugalRGB** from the application menu.
 
 ### Linux (from source)
 
