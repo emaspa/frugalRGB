@@ -77,6 +77,14 @@ pythonw main.pyw
 pythonw main.pyw
 ```
 
+### Arch Linux (AUR)
+
+```bash
+yay -S frugalrgb
+```
+
+Installs the app, the udev rules, a desktop entry, and the kernel module autoload config. After installing: add your user to the `i2c` group for DRAM RGB, and on boards whose BIOS claims the SMBus (most Gigabyte boards) boot with `acpi_enforce_resources=lax` (details in the Linux section below). The PKGBUILD lives in [`aur/`](aur/).
+
 ### Linux (from source)
 
 Tested on Arch (CachyOS) with the Gigabyte X870E Aorus Master X3D and the KLEVV DDR5 kit above.
