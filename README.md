@@ -15,7 +15,7 @@ This app was built for **my specific hardware**. It currently supports:
 | **Gigabyte RGB Fusion 2.0** (VID `048D`, ITE IT5711/IT8297) | USB HID | Tested on Gigabyte X870E Aorus Master X3D. Does **not** require admin. |
 | **ASUS Aura USB** (VID `0B05`) | USB HID | Mainboard protocol — onboard RGB + addressable headers, auto-detected from the device config table (PIDs `19AF`/`1939`/`18F3`). Does **not** require admin. |
 | **ASUS GPU RGB** (ENE controller at I2C `0x67`) | NvAPI I2C | Tested on ASUS TUF RTX 5090. Does **not** require admin. NVIDIA GPU only. |
-| **ENE AUDA-series DDR5 DRAM RGB** (addresses `0x70`–`0x77`) | SMBus (i801/PIIX4) | Tested with KLEVV DDR5 RGB. **Requires admin** (kernel-level SMBus access). Supports Intel (i801) and AMD (PIIX4) chipsets. |
+| **ENE AUDA-series DDR5 DRAM RGB** (addresses `0x70`–`0x77`) | SMBus (i801/PIIX4) | Tested with KLEVV DDR5 RGB. **Requires admin on Windows** (kernel-level SMBus access); on Linux the `i2c` group is enough. Supports Intel (i801) and AMD (PIIX4) chipsets. |
 
 ### What about my hardware?
 
@@ -36,7 +36,7 @@ There is a **Diagnostics** button in the app that collects device info, register
 - **Save to Hardware** — write the current color/mode to the DRAM controller's non-volatile flash so it persists across power cycles (boot color). See [warning below](#save-to-hardware-warning)
 - **Diagnostics** — collect system info, USB HID enumeration, SMBus scan, device register dumps, and config files into a zip for troubleshooting (run as admin to include SMBus/RAM data)
 - **Aura Test** — for ASUS Aura boards, shows the detected controller's firmware and zone layout and cycles the LEDs through red/green/blue/white to confirm lighting is working
-- **Cross-platform** — runs on Windows (PawnIO driver) and Linux (smbus2); Linux support is untested
+- **Cross-platform** — runs on Windows (PawnIO driver) and Linux (hidapi + smbus2), see [Linux](#linux-from-source) for setup
 - **Single instance** — prevents duplicate instances with a friendly notification
 
 ## Installation
@@ -76,6 +76,47 @@ pythonw main.pyw
 # Run your terminal as Administrator, then:
 pythonw main.pyw
 ```
+
+### Linux (from source)
+
+Tested on Arch (CachyOS) with the Gigabyte X870E Aorus Master X3D and the KLEVV DDR5 kit above.
+
+Install dependencies. The GUI needs Tk, and most distros block `pip install` into the system Python, so use a venv:
+
+```bash
+sudo pacman -S tk    # Debian/Ubuntu: sudo apt install python3-tk python3-venv
+
+git clone https://github.com/emaspa/frugalRGB.git
+cd frugalRGB
+python -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
+
+**USB RGB** (motherboard controllers): no root needed. Install the udev rules so the app can open the devices as a normal user, then replug or retrigger:
+
+```bash
+sudo cp 70-frugalrgb.rules /etc/udev/rules.d/
+sudo udevadm control --reload && sudo udevadm trigger
+```
+
+**RAM RGB** (DDR5 via SMBus): also no root needed on Linux. Join the `i2c` group and load the chipset SMBus driver:
+
+```bash
+sudo usermod -aG i2c $USER    # then log out and back in
+# AMD chipsets (Intel: i2c-i801 instead)
+echo i2c-piix4 | sudo tee /etc/modules-load.d/i2c-piix4.conf
+sudo modprobe i2c-piix4
+```
+
+On many boards (Gigabyte in particular) the BIOS claims the SMBus region for itself and the kernel then refuses to bind the driver: `dmesg` shows `ACPI Warning: SystemIO range ... conflicts with OpRegion`. Boot with the kernel parameter `acpi_enforce_resources=lax` to allow it. This is the same access pattern RGB tools rely on under Windows, where no such check exists; OpenRGB documents the same parameter for DRAM RGB.
+
+Run with:
+
+```bash
+.venv/bin/python main.pyw
+```
+
+Note: the PyPI `hidapi` wheel uses its libusb backend, which detaches the `usbhid` kernel driver from the RGB controller's interface while the app has it open. That is harmless for a dedicated RGB device.
 
 ### Build the exe yourself
 
