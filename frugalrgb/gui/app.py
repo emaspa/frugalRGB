@@ -85,6 +85,7 @@ class FrugalRGBApp(ctk.CTk):
 
         version_label = ctk.CTkLabel(
             bottom_bar, text="v0.1.0", text_color="gray", font=ctk.CTkFont(size=11),
+            height=24,
         )
         version_label.pack(side="right")
 
@@ -250,7 +251,7 @@ class FrugalRGBApp(ctk.CTk):
         for label_text, var in [("R", self._r_var), ("G", self._g_var), ("B", self._b_var)]:
             lbl = ctk.CTkLabel(color_frame, text=label_text, width=15)
             lbl.pack(side="left", padx=(10, 2))
-            entry = ctk.CTkEntry(color_frame, textvariable=var, width=45)
+            entry = ctk.CTkEntry(color_frame, textvariable=var, width=60)
             entry.pack(side="left", padx=2)
 
         rgb_apply_btn = ctk.CTkButton(
