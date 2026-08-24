@@ -36,7 +36,7 @@ There is a **Diagnostics** button in the app that collects device info, register
 - **Save to Hardware** — write the current color/mode to the DRAM controller's non-volatile flash so it persists across power cycles (boot color). See [warning below](#save-to-hardware-warning)
 - **Diagnostics** — collect system info, USB HID enumeration, SMBus scan, device register dumps, and config files into a zip for troubleshooting (run as admin to include SMBus/RAM data)
 - **Aura Test** — for ASUS Aura boards, shows the detected controller's firmware and zone layout and cycles the LEDs through red/green/blue/white to confirm lighting is working
-- **Cross-platform** — runs on Windows (PawnIO driver) and Linux (hidapi + smbus2), see [Linux](#linux-from-source) for setup. Linux support is only tested on CachyOS (Arch-based); other distributions should work but are untested.
+- **Cross-platform** — runs on Windows (PawnIO driver) and Linux (hidapi + smbus2). Packages are available for [Arch (AUR)](#arch-linux-aur) and [Ubuntu/Debian (.deb)](#ubuntu--debian-deb), or install [from source](#linux-from-source). Linux hardware support is only tested on CachyOS (Arch-based); other distributions should work but are untested.
 - **Single instance** — prevents duplicate instances with a friendly notification
 
 ## Installation
@@ -120,9 +120,40 @@ sudo pacman -S python-gobject libayatana-appindicator
 
 **6. Run** `frugalrgb` from a terminal, or launch **frugalRGB** from the application menu.
 
+### Ubuntu / Debian (.deb)
+
+**1. Install** the `.deb` from the [Releases](../../releases) page (or build it yourself, see below):
+
+```bash
+sudo apt install ./frugalrgb_*.deb
+```
+
+This installs the app (`frugalrgb` command + application menu entry), the udev rules for USB RGB access, and autoload config for the SMBus kernel modules — and, via Recommends, `i2c-tools` (which provides the `i2c` group and device permissions) and the appindicator libraries for a proper transparent tray icon. The post-install script reloads udev and loads the SMBus modules, so no reboot is needed.
+
+**2. Join the `i2c` group** (needed for DRAM RGB and GPU RGB):
+
+```bash
+sudo usermod -aG i2c $USER
+```
+
+Then log out and back in for the group to take effect. If the group doesn't exist, `i2c-tools` was skipped — `sudo apt install i2c-tools` first.
+
+**3. Gigabyte boards only, for DRAM RGB:** add the kernel parameter `acpi_enforce_resources=lax` (see step 4 of the AUR section for why): append it to `GRUB_CMDLINE_LINUX_DEFAULT` in `/etc/default/grub`, then `sudo update-grub` and reboot.
+
+**4. Run** `frugalrgb` from a terminal, or launch **frugalRGB** from the application menu.
+
+To build the package yourself instead of downloading it:
+
+```bash
+sudo apt install python3-pil python3-pip
+bash packaging/build_deb.sh    # output: dist/frugalrgb_<version>_all.deb
+```
+
+The deb depends on distro packages for everything Debian ships (`python3-hid` is the same cython-hidapi library as the PyPI `hidapi` wheel, built against hidraw) and vendors the pure-Python deps Debian doesn't package (customtkinter, CTkColorPicker, darkdetect) into `/usr/lib/frugalrgb/vendor`. Note the app needs Python ≥ 3.10, i.e. Ubuntu 22.04 or newer.
+
 ### Linux (from source)
 
-Linux support is only tested on CachyOS (Arch-based), with the Gigabyte X870E Aorus Master X3D, the KLEVV DDR5 kit, and the TUF RTX 5090 above. Other distributions should work but are untested; the package names below are for Arch with Debian/Ubuntu equivalents in comments.
+Linux support is only tested on CachyOS (Arch-based), with the Gigabyte X870E Aorus Master X3D, the KLEVV DDR5 kit, and the TUF RTX 5090 above. Other distributions should work but are untested; the package names below are for Arch with Debian/Ubuntu equivalents in comments. Python ≥ 3.10 is required (Ubuntu 22.04 or newer).
 
 Install dependencies. The GUI needs Tk, and most distros block `pip install` into the system Python, so use a venv:
 
@@ -142,16 +173,21 @@ sudo cp 70-frugalrgb.rules /etc/udev/rules.d/
 sudo udevadm control --reload && sudo udevadm trigger
 ```
 
-**RAM RGB** (DDR5 via SMBus): also no root needed on Linux. Join the `i2c` group and load the chipset SMBus driver:
+**RAM RGB** (DDR5 via SMBus): also no root needed on Linux. Join the `i2c` group and load `i2c-dev` plus the chipset SMBus driver:
 
 ```bash
+# Debian/Ubuntu only: stock installs have no i2c group — i2c-tools creates it
+# and installs the udev rule that makes /dev/i2c-* group-accessible:
+sudo apt install i2c-tools
+
 sudo usermod -aG i2c $USER    # then log out and back in
-# AMD chipsets (Intel: i2c-i801 instead)
-echo i2c-piix4 | sudo tee /etc/modules-load.d/i2c-piix4.conf
-sudo modprobe i2c-piix4
+# i2c-dev exposes the /dev/i2c-* nodes; i2c-piix4 is the AMD chipset
+# driver (Intel: i2c-i801 instead)
+printf 'i2c-dev\ni2c-piix4\n' | sudo tee /etc/modules-load.d/frugalrgb.conf
+sudo modprobe i2c-dev i2c-piix4
 ```
 
-On many boards (Gigabyte in particular) the BIOS claims the SMBus region for itself and the kernel then refuses to bind the driver: `dmesg` shows `ACPI Warning: SystemIO range ... conflicts with OpRegion`. Boot with the kernel parameter `acpi_enforce_resources=lax` to allow it. This is the same access pattern RGB tools rely on under Windows, where no such check exists; OpenRGB documents the same parameter for DRAM RGB.
+On many boards (Gigabyte in particular) the BIOS claims the SMBus region for itself and the kernel then refuses to bind the driver: `dmesg` shows `ACPI Warning: SystemIO range ... conflicts with OpRegion`. Boot with the kernel parameter `acpi_enforce_resources=lax` to allow it (on Debian/Ubuntu: append it to `GRUB_CMDLINE_LINUX_DEFAULT` in `/etc/default/grub`, then `sudo update-grub` and reboot). This is the same access pattern RGB tools rely on under Windows, where no such check exists; OpenRGB documents the same parameter for DRAM RGB.
 
 **System tray icon**: for a proper transparent tray icon, pystray needs its appindicator backend (the native StatusNotifier protocol on KDE and GNOME). Install PyGObject and the Ayatana appindicator library, and let the venv see system packages:
 
@@ -229,7 +265,11 @@ frugalrgb/
     app.py                    CustomTkinter main window + tray
     widgets.py                Device cards, presets, calibration
   diagnostics.py              Diagnostics zip collector
-build.py                      PyInstaller build script
+build.py                      PyInstaller build script (Windows exe)
+packaging/
+  build_deb.sh                Debian/Ubuntu package build script
+aur/
+  PKGBUILD                    Arch Linux package (AUR)
 modules/
   SmbusI801.bin               PawnIO kernel module (not included — download separately)
 ```

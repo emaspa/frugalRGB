@@ -1,0 +1,41 @@
+name: deb
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  build-deb:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pil python3-pip
+
+      - name: Build .deb
+        run: bash packaging/build_deb.sh
+
+      - name: Smoke-test install
+        run: |
+          sudo apt-get install -y ./dist/frugalrgb_*.deb
+          command -v frugalrgb
+          PYTHONPATH=/usr/lib/frugalrgb/vendor python3 -c \
+            "import customtkinter, CTkColorPicker, hid, smbus2, pystray, PIL"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frugalrgb-deb
+          path: dist/*.deb
+
+      - name: Attach to release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" dist/*.deb --clobber
