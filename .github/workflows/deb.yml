@@ -16,7 +16,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3-pil python3-pip
+          sudo apt-get install -y python3-pil python3-pip xvfb
 
       - name: Build .deb
         run: bash packaging/build_deb.sh
@@ -25,7 +25,8 @@ jobs:
         run: |
           sudo apt-get install -y ./dist/frugalrgb_*.deb
           command -v frugalrgb
-          PYTHONPATH=/usr/lib/frugalrgb/vendor python3 -c \
+          # pystray connects to the X display at import time — needs xvfb here
+          PYTHONPATH=/usr/lib/frugalrgb/vendor xvfb-run -a python3 -c \
             "import customtkinter, CTkColorPicker, hid, smbus2, pystray, PIL"
 
       - name: Upload artifact
