@@ -9,6 +9,7 @@ from .asus_gpu import detect_asus_gpu
 from .asus_aura_usb import detect_asus_aura_usb
 from .gigabyte_rgb_fusion2 import detect_gigabyte_rgb_fusion2
 from .msi_mystic_light import detect_msi_mystic_light
+from .creative_katana import detect_creative_katana
 
 log = logging.getLogger(__name__)
 
@@ -42,6 +43,12 @@ def detect_all(bus: SMBusInterface | None = None) -> list[RGBController]:
     if aura is not None:
         log.info("  Found: %s", aura.name)
         controllers.append(aura)
+
+    # Creative Sound BlasterX Katana soundbar
+    katana = detect_creative_katana()
+    if katana is not None:
+        log.info("  Found: %s", katana.name)
+        controllers.append(katana)
 
     # ASUS GPU RGB via NvAPI I2C
     asus = detect_asus_gpu()

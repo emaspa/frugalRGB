@@ -29,6 +29,10 @@ SUBSYSTEM=="hidraw", ATTRS{idVendor}=="048d", ATTRS{idProduct}=="8950", TAG+="ua
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="048d", ATTRS{idProduct}=="5702", TAG+="uaccess"
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="048d", ATTRS{idProduct}=="5711", TAG+="uaccess"
 
+# Creative Sound BlasterX Katana soundbar
+SUBSYSTEM=="usb", ATTR{idVendor}=="041e", ATTR{idProduct}=="3247", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="041e", ATTRS{idProduct}=="3247", TAG+="uaccess"
+
 # ASUS Aura USB (mainboard)
 SUBSYSTEM=="usb", ATTR{idVendor}=="0b05", ATTR{idProduct}=="19af", TAG+="uaccess"
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0b05", ATTRS{idProduct}=="19af", TAG+="uaccess"
