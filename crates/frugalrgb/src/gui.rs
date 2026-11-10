@@ -5,13 +5,16 @@
 
 use std::cell::RefCell;
 use std::fs::File;
-use std::path::PathBuf;
 use std::rc::Rc;
+use std::time::Duration;
 
 use frugalrgb_core::engine::{self, Card};
 use frugalrgb_core::store::{self, Calibration, Config, Preset, Presets, ZoneState, NO_PRESET};
+use frugalrgb_core::transport::SharedBus;
 use frugalrgb_core::worker::{Command, Event, Worker};
-use frugalrgb_core::{detect, Correction, DeviceInfo, Mode, Rgb};
+use frugalrgb_core::{detect, diagnostics, Correction, DeviceInfo, Mode, Rgb};
+
+use crate::{autostart, logging};
 use slint::{Color, ComponentHandle, Model, ModelRc, Rgba8Pixel, SharedPixelBuffer, SharedString, VecModel};
 
 slint::include_modules!();
@@ -86,9 +89,10 @@ fn app_icon(size: u32) -> slint::Image {
     slint::Image::from_rgba8(buffer)
 }
 
-/// Only one frugalRGB may drive the devices. The lock file is the one the
-/// Python version uses, so the two exclude each other as well.
-fn single_instance_lock() -> Result<File, String> {
+/// Only one frugalRGB may drive the devices. `None` means another one holds
+/// the lock. The lock file is the one the Python versions used, so they are
+/// kept out as well.
+fn single_instance_lock() -> Result<Option<File>, String> {
     let path = std::env::temp_dir().join("frugalrgb.lock");
     let file = File::options()
         .create(true)
@@ -96,50 +100,32 @@ fn single_instance_lock() -> Result<File, String> {
         .write(true)
         .open(&path)
         .map_err(|e| format!("{}: {e}", path.display()))?;
-    file.try_lock().map_err(|_| "another instance of frugalRGB is running".to_string())?;
-    Ok(file)
+    Ok(file.try_lock().is_ok().then_some(file))
 }
 
-/// The XDG autostart entry, where the desktop supports one.
-fn autostart_entry() -> Option<PathBuf> {
-    if !cfg!(target_os = "linux") {
-        return None;
-    }
-    let config_home = std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))?;
-    Some(config_home.join("autostart").join("frugalrgb.desktop"))
-}
-
-fn set_autostart(enabled: bool) -> std::io::Result<()> {
-    let Some(entry) = autostart_entry() else {
-        return Ok(());
-    };
-    if !enabled {
-        return match std::fs::remove_file(&entry) {
-            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
-            _ => Ok(()),
-        };
-    }
-    // A packaged binary is on the PATH; anything else is started by path
-    let exe = std::env::current_exe()?;
-    let command = if exe.starts_with("/usr/bin") { "frugalrgb".to_string() } else { exe.display().to_string() };
-    if let Some(dir) = entry.parent() {
-        std::fs::create_dir_all(dir)?;
-    }
-    std::fs::write(
-        &entry,
-        format!(
-            "[Desktop Entry]\nType=Application\nName=frugalRGB\nExec={command}\nIcon=frugalrgb\n\
-             X-GNOME-Autostart-enabled=true\n"
-        ),
-    )
+/// Show a message in a small window of its own and wait for the user.
+fn notice(message: &str) -> Result<(), String> {
+    let fail = |e: slint::PlatformError| e.to_string();
+    let window = NoticeWindow::new().map_err(fail)?;
+    window.set_app_icon(app_icon(64));
+    window.set_message(message.into());
+    let weak = window.as_weak();
+    window.on_dismissed(move || {
+        if let Some(window) = weak.upgrade() {
+            let _ = window.hide();
+        }
+    });
+    window.run().map_err(fail)
 }
 
 struct App {
     window: slint::Weak<MainWindow>,
     tray: Option<Tray>,
     devices: Vec<DeviceInfo>,
+    /// What each device says about itself (firmware, address, ...).
+    facts: Vec<Vec<(&'static str, String)>>,
+    /// The memory's bus, which a diagnostics report scans.
+    smbus: Option<SharedBus>,
     /// The device and zone behind each row of the zone list.
     card_zones: Vec<(usize, u8)>,
     cards: Rc<VecModel<ZoneCard>>,
@@ -376,9 +362,86 @@ impl App {
         self.send(Command::Save { devices });
     }
 
+    /// Write a diagnostics report next to the user's other files. The
+    /// device thread collects it, as it owns the devices.
+    fn diagnostics(&self) {
+        let window = self.window();
+        window.set_diagnostics_running(true);
+        self.status("Collecting diagnostics...");
+
+        let smbus = self.smbus.clone();
+        let weak = self.window.clone();
+        self.send(Command::Run(Box::new(move |controllers| {
+            let report = diagnostics::report(controllers, smbus.as_ref(), &logging::recent());
+            let outcome = match diagnostics::save(&report) {
+                Ok(path) => {
+                    format!("Diagnostics saved to:\n{}\n\nAttach this file to your bug report.", path.display())
+                }
+                Err(e) => format!("Could not save the diagnostics: {e}"),
+            };
+            let _ = weak.upgrade_in_event_loop(move |window| {
+                window.set_diagnostics_running(false);
+                window.set_status(SharedString::new());
+                window.set_notice(outcome.into());
+            });
+        })));
+    }
+
+    /// Show what is known about the device picked in the test dialog.
+    fn show_test_device(&self) {
+        let window = self.window();
+        let index = usize::try_from(window.get_test_device()).unwrap_or(0);
+        let mut lines: Vec<String> = Vec::new();
+        if let Some(device) = self.devices.get(index) {
+            lines.push(format!("Zones: {}", device.zones.len()));
+        }
+        if let Some(facts) = self.facts.get(index) {
+            lines.extend(facts.iter().map(|(label, value)| format!("{label}: {value}")));
+        }
+        window.set_test_facts(lines.join("\n").into());
+        window.set_test_status(SharedString::new());
+    }
+
+    /// Run the colour test on the picked device, then put the cards back.
+    fn run_test(&self) {
+        let window = self.window();
+        let Ok(index) = usize::try_from(window.get_test_device()) else { return };
+        window.set_test_running(true);
+
+        let weak = self.window.clone();
+        self.send(Command::Run(Box::new(move |controllers| {
+            let result = match controllers.get_mut(index) {
+                Some(ctrl) => engine::test_colors(ctrl.as_mut(), Duration::from_millis(1300), |shade| {
+                    let text = format!("Showing: {shade}");
+                    let _ = weak.upgrade_in_event_loop(move |window| window.set_test_status(text.into()));
+                }),
+                None => Ok(()),
+            };
+            let done = match result {
+                Ok(()) => "Done. Your colors are back.".to_string(),
+                Err(e) => format!("The device did not take the test: {e}"),
+            };
+            let _ = weak.upgrade_in_event_loop(move |window| {
+                window.set_test_status(done.into());
+                window.set_test_running(false);
+                window.invoke_apply();
+            });
+        })));
+    }
+
+    /// Remember the window's size while it is on screen.
+    fn remember_size(&mut self) {
+        let window = self.window();
+        if window.window().is_visible() {
+            let size = window.window().size().to_logical(window.window().scale_factor());
+            self.config.set_window_size(size.width as u32, size.height as u32);
+        }
+    }
+
     /// Leave the program: settings are saved and the devices get their last
     /// write (lights off, if the user asked for that on close).
     fn quit(&mut self) {
+        self.remember_size();
         self.save_config();
         if let Some(worker) = self.worker.take() {
             worker.shutdown(self.config.off_on_close);
@@ -403,7 +466,9 @@ fn describe(event: Event) -> String {
 
 /// Open the window (or just the tray icon) and run until the user quits.
 pub fn run() -> Result<(), String> {
-    let _lock = single_instance_lock()?;
+    let Some(_lock) = single_instance_lock()? else {
+        return notice("frugalRGB is already running. Look for its icon in the system tray.");
+    };
     let fail = |e: slint::PlatformError| e.to_string();
 
     let config = store::load_config(&store::config_path()).unwrap_or_else(|e| {
@@ -415,9 +480,10 @@ pub fn run() -> Result<(), String> {
         Presets::new()
     });
 
-    let mut controllers = detect::detect_all();
+    let detect::Hardware { mut controllers, smbus } = detect::scan();
     config.calibrate(&mut controllers);
     let devices = DeviceInfo::all(&controllers);
+    let facts = controllers.iter().map(|ctrl| ctrl.facts()).collect();
     log::info!("Found {} RGB device(s)", devices.len());
 
     let window = MainWindow::new().map_err(fail)?;
@@ -427,7 +493,7 @@ pub fn run() -> Result<(), String> {
     window.set_devices(strings(devices.iter().map(|d| d.name.as_str())));
     window.set_no_devices_hint(
         if cfg!(windows) {
-            "No RGB devices detected."
+            "No RGB devices detected.\n\nClose other RGB software (Armoury Crate, RGB Fusion, Mystic Light) and start frugalRGB again. Memory RGB needs PawnIO and Run as administrator."
         } else {
             "No RGB devices detected.\n\nInstall the udev rules (70-frugalrgb.rules) for USB devices and join the 'i2c' group for memory RGB."
         }
@@ -440,8 +506,12 @@ pub fn run() -> Result<(), String> {
     window.set_off_on_close(config.off_on_close);
     window.set_close_to_tray(config.minimize_to_tray);
     window.set_start_minimized(config.start_minimized);
-    window.set_autostart_supported(autostart_entry().is_some());
-    window.set_start_at_login(autostart_entry().is_some_and(|entry| entry.exists()));
+    window.set_autostart_supported(autostart::supported());
+    window.set_start_at_login(autostart::enabled());
+    if let Some((width, height)) = config.window_size() {
+        window.set_start_width(width as f32);
+        window.set_start_height(height as f32);
+    }
 
     // One row per zone, device by device
     let mut card_zones = Vec::new();
@@ -454,7 +524,7 @@ pub fn run() -> Result<(), String> {
                 zone: zone.name.as_str().into(),
                 header: position == 0,
                 enabled: true,
-                color: Color::from_rgb_u8(0, 0, 0),
+                color: Color::from_rgb_u8(255, 255, 255),
             });
         }
     }
@@ -484,6 +554,8 @@ pub fn run() -> Result<(), String> {
         window: window.as_weak(),
         tray,
         devices,
+        facts,
+        smbus,
         card_zones,
         cards,
         config,
@@ -538,8 +610,11 @@ pub fn run() -> Result<(), String> {
     });
 
     on!(on_options_changed, |app| app.options_changed());
+    on!(on_diagnostics, |app| app.diagnostics());
+    on!(on_test_device_changed, |app| app.show_test_device());
+    on!(on_run_test, |app| app.run_test());
     on!(on_start_at_login_toggled, |app, enabled| {
-        if let Err(e) = set_autostart(enabled) {
+        if let Err(e) = autostart::set(enabled) {
             app.status(format!("Could not change the autostart entry: {e}"));
             app.window().set_start_at_login(!enabled);
         }
@@ -550,6 +625,7 @@ pub fn run() -> Result<(), String> {
         let shared = Rc::clone(&app);
         window.window().on_close_requested(move || {
             let mut app = shared.borrow_mut();
+            app.remember_size();
             if !(app.config.minimize_to_tray && app.tray.is_some()) {
                 app.quit();
             }

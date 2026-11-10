@@ -13,6 +13,7 @@ pub const PID: u16 = 0x01A2;
 const REPORT_SIZE: usize = 65; // report ID + 64 data bytes
 
 const CMD_SET_ZONE: u8 = 0x10;
+const CMD_READ_ZONE: u8 = 0x11;
 const CMD_COMMIT: u8 = 0x12;
 const CMD_READ_HEADER: u8 = 0x14;
 const CMD_WRITE_HEADER: u8 = 0x15;
@@ -130,6 +131,29 @@ impl Asrock {
 }
 
 impl Controller for Asrock {
+    fn dump(&mut self) -> Option<(String, String)> {
+        let head = |reply: Result<Vec<u8>>| match reply {
+            Ok(reply) if reply.is_empty() => "no response".to_string(),
+            Ok(reply) => reply.iter().take(16).map(|b| format!("{b:02X}")).collect::<Vec<_>>().join(" "),
+            Err(e) => format!("error: {e}"),
+        };
+
+        let mut text = String::from("Config tables\n");
+        for (table, label) in [(CFG_ZONE_AVAIL, "zone availability"), (CFG_LED_COUNT, "LED count"), (CFG_RGSWAP, "RGSwap")] {
+            let reply = self.read_header(table);
+            text.push_str(&format!("  0x{table:02X} ({label}): {}\n", head(reply)));
+        }
+        text.push_str("Zone readback\n");
+        for zone in 0..8u8 {
+            let mut buf = [0u8; REPORT_SIZE];
+            buf[0x01] = CMD_READ_ZONE;
+            buf[0x03] = zone;
+            let reply = self.exchange(&buf);
+            text.push_str(&format!("  Zone {zone}: {}\n", head(reply)));
+        }
+        Some(("ASRock Polychrome USB".to_string(), text))
+    }
+
     fn name(&self) -> &str {
         "ASRock Polychrome USB"
     }

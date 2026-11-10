@@ -6,10 +6,17 @@
 
 pub mod controllers;
 pub mod detect;
+pub mod diagnostics;
 pub mod engine;
 pub mod hid;
+#[cfg(windows)]
+pub mod nvapi;
 #[cfg(target_os = "linux")]
 pub mod smbus_linux;
+#[cfg(windows)]
+pub mod smbus_windows;
+#[cfg(windows)]
+pub mod win;
 pub mod store;
 pub mod transport;
 mod types;

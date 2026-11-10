@@ -3,7 +3,7 @@
 //! The whole lighting state is one 185-byte feature report (ID 0x52). It is
 //! read once, edited in place per zone, and written back as a whole.
 
-use super::Controller;
+use super::{hex_rows, Controller};
 use crate::transport::HidTransport;
 use crate::{Correction, Mode, Result, Rgb, Zone, ZoneWrite};
 
@@ -26,6 +26,28 @@ const MODE_RAINBOW: u8 = 0x19;
 const BRIGHTNESS: u8 = 10;
 /// Byte that asks the board to store the state in flash.
 const SAVE_FLAG: usize = 184;
+
+/// Every zone block of the state report, for diagnostics.
+const STATE_BLOCKS: [(&str, usize); 18] = [
+    ("J_RGB_1", 1),
+    ("J_PIPE_1", 11),
+    ("J_PIPE_2", 21),
+    ("J_RAINBOW_1", 31),
+    ("J_RAINBOW_2", 42),
+    ("J_CORSAIR", 53),
+    ("J_CORSAIR_OUT", 64),
+    ("ONBOARD", 74),
+    ("ONBOARD_1", 84),
+    ("ONBOARD_2", 94),
+    ("ONBOARD_3", 104),
+    ("ONBOARD_4", 114),
+    ("ONBOARD_5", 124),
+    ("ONBOARD_6", 134),
+    ("ONBOARD_7", 144),
+    ("ONBOARD_8", 154),
+    ("ONBOARD_9", 164),
+    ("J_RGB_2", 174),
+];
 
 const MODES: [Mode; 6] = [
     Mode::Off,
@@ -117,6 +139,7 @@ fn mode_value(mode: Mode) -> u8 {
 
 pub struct Msi {
     dev: Box<dyn HidTransport>,
+    pid: u16,
     name: String,
     onboard_leds: u8,
     state: Vec<u8>,
@@ -173,6 +196,7 @@ impl Msi {
 
         Ok(Msi {
             dev,
+            pid,
             name,
             onboard_leds,
             state,
@@ -229,6 +253,36 @@ impl Msi {
 }
 
 impl Controller for Msi {
+    fn facts(&self) -> Vec<(&'static str, String)> {
+        vec![("PID", format!("0x{:04X}", self.pid)), ("Onboard LEDs", self.onboard_leds.to_string())]
+    }
+
+    fn dump(&mut self) -> Option<(String, String)> {
+        // The state report as last read or written; nothing is queried
+        let state = &self.state;
+        let mut text = format!("State report ({} bytes)\n{}", state.len(), hex_rows(state, 0));
+        text.push_str("Zone blocks\n");
+        for (label, at) in STATE_BLOCKS {
+            let Some(block) = state.get(at..at + 9) else {
+                continue;
+            };
+            text.push_str(&format!(
+                "  {label:<14} mode=0x{:02X} RGB=({},{},{}) bright={} speed={} flags=0x{:02X}\n",
+                block[0],
+                block[1],
+                block[2],
+                block[3],
+                (block[4] >> 2) & 0x1F,
+                block[4] & 0x03,
+                block[8]
+            ));
+        }
+        if let Some(save) = state.get(SAVE_FLAG) {
+            text.push_str(&format!("  save flag: {save}\n"));
+        }
+        Some((format!("MSI Mystic Light (PID 0x{:04X})", self.pid), text))
+    }
+
     fn name(&self) -> &str {
         &self.name
     }

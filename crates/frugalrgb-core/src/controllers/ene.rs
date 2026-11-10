@@ -5,14 +5,12 @@
 //! (address byte-swapped); the value is then written through command 0x01
 //! or read back through command 0x81.
 
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, MutexGuard};
 
-use super::Controller;
+use super::{hex_rows, Controller};
 use crate::transport::SmBus;
+pub use crate::transport::SharedBus;
 use crate::{Correction, Error, Mode, Result, Rgb, Zone, ZoneWrite};
-
-/// A bus shared by several devices, as the DIMMs on the chipset SMBus are.
-pub type SharedBus = Arc<Mutex<dyn SmBus>>;
 
 const REG_DEVICE_NAME: u16 = 0x1000;
 const REG_MICRON_CHECK: u16 = 0x1030;
@@ -156,6 +154,34 @@ impl EneV2 {
 }
 
 impl Controller for EneV2 {
+    fn facts(&self) -> Vec<(&'static str, String)> {
+        vec![("Address", format!("0x{:02X}", self.addr)), ("LEDs", self.num_leds.to_string())]
+    }
+
+    fn dump(&mut self) -> Option<(String, String)> {
+        let title = format!("ENE chip at 0x{:02X} ({})", self.addr, self.name);
+        let Ok(mut bus) = lock(&self.bus) else {
+            return Some((title, "The bus is unusable\n".to_string()));
+        };
+        // Unreadable registers show as FF, which no table holds throughout
+        let mut block = |start: u16, len: u16| -> Vec<u8> {
+            (0..len).map(|i| read_register(&mut *bus, self.addr, start + i).unwrap_or(0xFF)).collect()
+        };
+
+        let name = block(REG_DEVICE_NAME, 16);
+        let mut text = format!("Device name (0x{REG_DEVICE_NAME:04X})\n{}", hex_rows(&name, usize::from(REG_DEVICE_NAME)));
+        text.push_str(&format!("Config table\n{}", hex_rows(&block(REG_CONFIG_TABLE, 0x20), usize::from(REG_CONFIG_TABLE))));
+        text.push_str(&format!(
+            "Control registers (select, mode, speed, direction, ...)\n{}",
+            hex_rows(&block(REG_DIRECT_SELECT, 0x10), usize::from(REG_DIRECT_SELECT))
+        ));
+        text.push_str(&format!(
+            "Effect colours (red, blue, green per LED)\n{}",
+            hex_rows(&block(REG_V2_EFFECT_COLOR, 0x20), usize::from(REG_V2_EFFECT_COLOR))
+        ));
+        Some((title, text))
+    }
+
     fn name(&self) -> &str {
         &self.name
     }
@@ -261,6 +287,10 @@ impl EneDram {
 }
 
 impl Controller for EneDram {
+    fn facts(&self) -> Vec<(&'static str, String)> {
+        vec![("Address", format!("0x{:02X}", self.addr))]
+    }
+
     fn name(&self) -> &str {
         &self.name
     }

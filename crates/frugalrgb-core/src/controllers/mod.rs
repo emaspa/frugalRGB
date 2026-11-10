@@ -10,6 +10,16 @@ pub mod gigabyte;
 pub mod katana;
 pub mod msi;
 
+/// Bytes as rows of sixteen hex values, each row prefixed with its offset.
+pub(crate) fn hex_rows(bytes: &[u8], base: usize) -> String {
+    let mut text = String::new();
+    for (row, chunk) in bytes.chunks(16).enumerate() {
+        let hex: Vec<String> = chunk.iter().map(|b| format!("{b:02X}")).collect();
+        text.push_str(&format!("  0x{:04X}: {}\n", base + row * 16, hex.join(" ")));
+    }
+    text
+}
+
 /// What a front end needs to know about a device, detached from the
 /// hardware handle so it can be used while a worker thread owns the device.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -59,6 +69,17 @@ pub trait Controller: Send {
     fn apply(&mut self, mode: Mode, speed: u8, zones: &[ZoneWrite]) -> Result<()> {
         self.set_mode(mode, speed)?;
         self.write_zones(zones)
+    }
+
+    /// Short facts about the device for display: firmware, chip, address.
+    fn facts(&self) -> Vec<(&'static str, String)> {
+        Vec::new()
+    }
+
+    /// The device's tables and registers for a diagnostics report, as a
+    /// section title and its text. Reads from the device; changes nothing.
+    fn dump(&mut self) -> Option<(String, String)> {
+        None
     }
 
     /// Whether [`save`](Self::save) can store the current state in the

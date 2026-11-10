@@ -1,6 +1,8 @@
 //! The two ways frugalRGB reaches hardware. Controllers only ever see these
 //! traits, which keeps every protocol testable without the device.
 
+use std::sync::{Arc, Mutex};
+
 use crate::Result;
 
 /// A HID device. Buffers follow the hidapi convention: byte 0 of everything
@@ -26,3 +28,6 @@ pub trait SmBus: Send {
     fn write_word_data(&mut self, addr: u8, cmd: u8, value: u16) -> Result<()>;
     fn write_block_data(&mut self, addr: u8, cmd: u8, data: &[u8]) -> Result<()>;
 }
+
+/// A bus several controllers share, such as the DIMMs on the chipset SMBus.
+pub type SharedBus = Arc<Mutex<dyn SmBus>>;

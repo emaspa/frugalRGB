@@ -1,11 +1,17 @@
 //! frugalRGB: a window and tray icon for your RGB hardware, and the same
 //! thing as plain commands for scripts and login.
 
+// A Windows GUI program: no console window opens behind the app
+#![cfg_attr(all(windows, feature = "gui"), windows_subsystem = "windows")]
+
 use std::process::ExitCode;
 
+#[cfg(feature = "gui")]
+mod autostart;
 mod cli;
 #[cfg(feature = "gui")]
 mod gui;
+mod logging;
 
 const USAGE: &str = "\
 frugalrgb - no bloat, just LEDs
@@ -19,28 +25,13 @@ Commands:
   presets          Show saved presets
   apply [PRESET]   Apply a preset (default: the startup preset) and exit
   off              Switch every LED off
+  test             Show red, green, blue and white on every device
+  diagnostics      Print a report on the hardware for a bug report
 
 Options:
   -v, --verbose    Log what is being detected and written
   -h, --help       Show this help
   -V, --version    Show the version";
-
-struct StderrLog;
-
-impl log::Log for StderrLog {
-    fn enabled(&self, metadata: &log::Metadata) -> bool {
-        // Only our own crates: the UI toolkit is chatty at debug level
-        metadata.level() <= log::max_level() && metadata.target().starts_with("frugalrgb")
-    }
-
-    fn log(&self, record: &log::Record) {
-        if self.enabled(record.metadata()) {
-            eprintln!("{} {}", record.level(), record.args());
-        }
-    }
-
-    fn flush(&self) {}
-}
 
 #[cfg(feature = "gui")]
 fn window() -> Result<(), String> {
@@ -52,7 +43,24 @@ fn window() -> Result<(), String> {
     Err(format!("this build has no window\n\n{USAGE}"))
 }
 
+/// A Windows GUI program starts without a console. When a terminal started
+/// it, borrow that terminal so the commands can print.
+#[cfg(windows)]
+fn attach_console() {
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn AttachConsole(process: u32) -> i32;
+    }
+    const ATTACH_PARENT_PROCESS: u32 = u32::MAX;
+    // SAFETY: no pointers involved; failing just means there is no terminal
+    unsafe { AttachConsole(ATTACH_PARENT_PROCESS) };
+}
+
+#[cfg(not(windows))]
+fn attach_console() {}
+
 fn main() -> ExitCode {
+    attach_console();
     let mut verbose = false;
     let mut words: Vec<String> = Vec::new();
     for arg in std::env::args().skip(1) {
@@ -74,8 +82,7 @@ fn main() -> ExitCode {
 
     // Commands print their result and nothing else; the window keeps a log
     let quiet = if words.is_empty() { log::LevelFilter::Info } else { log::LevelFilter::Warn };
-    let _ = log::set_boxed_logger(Box::new(StderrLog));
-    log::set_max_level(if verbose { log::LevelFilter::Debug } else { quiet });
+    logging::init(if verbose { log::LevelFilter::Debug } else { quiet });
     let result = match words.as_slice() {
         [] => window(),
         ["list"] => cli::list(),
@@ -84,6 +91,8 @@ fn main() -> ExitCode {
         ["apply"] | ["--apply-quit"] => cli::apply(None),
         ["apply", name] => cli::apply(Some(name)),
         ["off"] => cli::off(),
+        ["test"] => cli::test(),
+        ["diagnostics"] => cli::diagnostics(),
         _ => {
             eprintln!("{USAGE}");
             return ExitCode::from(2);

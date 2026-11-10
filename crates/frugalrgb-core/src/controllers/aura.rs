@@ -11,7 +11,7 @@
 //! * Onboard ("fixed") lighting uses the effect (0x35) and effect-colour
 //!   (0x36) commands; addressable headers use the direct (0x40) command.
 
-use super::Controller;
+use super::{hex_rows, Controller};
 use crate::transport::HidTransport;
 use crate::{Correction, Mode, Result, Rgb, Zone, ZoneWrite};
 
@@ -105,6 +105,7 @@ impl ChannelColors {
 
 pub struct Aura {
     dev: Box<dyn HidTransport>,
+    pid: u16,
     name: String,
     firmware: String,
     config_ok: bool,
@@ -131,6 +132,7 @@ impl Aura {
 
         let mut aura = Aura {
             dev,
+            pid,
             name,
             firmware: String::new(),
             config_ok: false,
@@ -368,6 +370,38 @@ impl Aura {
 }
 
 impl Controller for Aura {
+    fn facts(&self) -> Vec<(&'static str, String)> {
+        let onboard: usize = self.channels.iter().filter(|c| c.kind == Kind::Fixed).map(|c| c.num_leds).sum();
+        let headers = self.channels.iter().filter(|c| c.kind == Kind::Addressable).count();
+        vec![
+            ("PID", format!("0x{:04X}", self.pid)),
+            ("Firmware", self.firmware.clone()),
+            ("Config table read", if self.config_ok { "yes" } else { "no" }.to_string()),
+            ("Onboard LEDs", onboard.to_string()),
+            ("Addressable headers", headers.to_string()),
+        ]
+    }
+
+    fn dump(&mut self) -> Option<(String, String)> {
+        let mut text = String::from("Channels\n");
+        for (i, channel) in self.channels.iter().enumerate() {
+            let kind = match channel.kind {
+                Kind::Fixed => "fixed",
+                Kind::Addressable => "addressable",
+            };
+            text.push_str(&format!(
+                "  [{i}] type={kind} effect_ch={} direct_ch={} num_leds={}\n",
+                channel.effect, channel.direct, channel.num_leds
+            ));
+        }
+        match self.query(REQUEST_CONFIG, REPLY_CONFIG, 3, 60) {
+            Ok(Some(config)) => text.push_str(&format!("Config table ({} bytes)\n{}", config.len(), hex_rows(&config, 0))),
+            Ok(None) => text.push_str("Config table: the device did not answer\n"),
+            Err(e) => text.push_str(&format!("Config table: {e}\n")),
+        }
+        Some((format!("ASUS Aura USB (PID 0x{:04X})", self.pid), text))
+    }
+
     fn name(&self) -> &str {
         &self.name
     }

@@ -7,7 +7,7 @@
 use std::thread::sleep;
 use std::time::Duration;
 
-use super::Controller;
+use super::{hex_rows, Controller};
 use crate::transport::HidTransport;
 use crate::{Correction, Error, Mode, Result, Rgb, Zone, ZoneWrite};
 
@@ -148,6 +148,8 @@ fn read_info(dev: &mut dyn HidTransport) -> Result<DeviceInfo> {
 
 pub struct Gigabyte {
     dev: Box<dyn HidTransport>,
+    pid: u16,
+    chip_id: u32,
     is_5711: bool,
     /// Whether [`take_over`](Self::take_over) has run.
     taken_over: bool,
@@ -204,6 +206,8 @@ impl Gigabyte {
 
         Ok(Gigabyte {
             dev,
+            pid,
+            chip_id: info.chip_id,
             is_5711,
             taken_over: false,
             name,
@@ -301,6 +305,40 @@ impl Gigabyte {
 }
 
 impl Controller for Gigabyte {
+    fn facts(&self) -> Vec<(&'static str, String)> {
+        vec![
+            ("PID", format!("0x{:04X}", self.pid)),
+            ("Firmware", self.firmware.clone()),
+            ("Chip ID", format!("0x{:08X}", self.chip_id)),
+            ("IT5711 registers", self.is_5711.to_string()),
+        ]
+    }
+
+    fn dump(&mut self) -> Option<(String, String)> {
+        let mut text = String::new();
+        let dev = self.dev.as_mut();
+        match command(dev, 0x60, 0, 0).and_then(|()| dev.get_feature_report(REPORT_ID, PACKET_SIZE)) {
+            Ok(info) => {
+                text.push_str(&format!("Device info report ({} bytes)\n{}", info.len(), hex_rows(&info, 0)));
+                if info.len() >= 12 {
+                    text.push_str(&format!(
+                        "  product byte: 0x{:02X}\n  device_num: {}\n  strip_detect: 0x{:02X}\n  \
+                         led_count_high: 0x{:02X}\n  led_count_low: 0x{:02X}\n  strip_ctrl_length1: {}\n  \
+                         support_cmd_flag: 0x{:02X}\n",
+                        info[1], info[2], info[3], info[8], info[9], info[10], info[11]
+                    ));
+                }
+            }
+            Err(e) => text.push_str(&format!("Failed to read the device info report: {e}\n")),
+        }
+        text.push_str("Zone layout\n");
+        for (zone, led) in self.zones.iter().zip(&self.leds) {
+            let led = led.map_or("all".to_string(), |led| led.to_string());
+            text.push_str(&format!("  Zone {}: {} (LED index {led})\n", zone.id, zone.name));
+        }
+        Some((format!("Gigabyte RGB Fusion 2.0 (PID 0x{:04X})", self.pid), text))
+    }
+
     fn name(&self) -> &str {
         &self.name
     }

@@ -12,3 +12,4 @@ aur/pkg/
 aur/*.tar.gz
 aur/*.pkg.tar.zst
 target/
+!packaging/frugalrgb.ico

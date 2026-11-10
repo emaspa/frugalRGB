@@ -44,8 +44,9 @@ impl HidTransport for HidDev {
 pub struct HidInfo {
     pub vendor_id: u16,
     pub product_id: u16,
-    pub usage_page: u16,
-    pub usage: u16,
+    /// Every (usage page, usage) the interface declares. Empty when the
+    /// backend cannot tell.
+    pub usages: Vec<(u16, u16)>,
     /// USB interface number, or -1 when the backend cannot tell.
     pub interface: i32,
     pub product: String,
@@ -55,6 +56,10 @@ pub struct HidInfo {
 impl HidInfo {
     pub fn path(&self) -> String {
         self.path.to_string_lossy().into_owned()
+    }
+
+    pub fn has_usage(&self, page: u16, usage: u16) -> bool {
+        self.usages.contains(&(page, usage))
     }
 }
 
@@ -70,26 +75,45 @@ impl HidBus {
     pub fn devices(&self, vendor_id: u16) -> Vec<HidInfo> {
         let mut found: Vec<HidInfo> = Vec::new();
         for d in self.0.device_list().filter(|d| d.vendor_id() == vendor_id) {
-            // Backends list a path once per top-level usage; keep the first
-            // entry but prefer one that carries usage information
+            // Backends list a path once per top-level usage
+            let usage = (d.usage_page() != 0).then(|| (d.usage_page(), d.usage()));
             if let Some(seen) = found.iter_mut().find(|f| f.path.as_c_str() == d.path()) {
-                if seen.usage_page == 0 {
-                    seen.usage_page = d.usage_page();
-                    seen.usage = d.usage();
-                }
+                seen.usages.extend(usage);
                 continue;
             }
             found.push(HidInfo {
                 vendor_id: d.vendor_id(),
                 product_id: d.product_id(),
-                usage_page: d.usage_page(),
-                usage: d.usage(),
+                usages: usage.into_iter().collect(),
                 interface: d.interface_number(),
                 product: d.product_string().unwrap_or_default().trim().to_string(),
                 path: d.path().to_owned(),
             });
         }
         found
+    }
+
+    /// One line per HID interface on the system, for diagnostics.
+    pub fn describe_all(&self) -> Vec<String> {
+        let mut lines: Vec<String> = self
+            .0
+            .device_list()
+            .map(|d| {
+                format!(
+                    "{:04X}:{:04X} usage {:04X}/{:04X} interface {:>2}  {} {}",
+                    d.vendor_id(),
+                    d.product_id(),
+                    d.usage_page(),
+                    d.usage(),
+                    d.interface_number(),
+                    d.manufacturer_string().unwrap_or_default().trim(),
+                    d.product_string().unwrap_or_default().trim()
+                )
+            })
+            .collect();
+        lines.sort();
+        lines.dedup();
+        lines
     }
 
     pub fn open(&self, info: &HidInfo) -> Result<HidDev> {

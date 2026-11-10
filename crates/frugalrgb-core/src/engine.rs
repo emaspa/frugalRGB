@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
-use crate::{Controller, DeviceInfo, Error, Mode, Rgb, ZoneWrite};
+use crate::{Controller, DeviceInfo, Error, Mode, Result, Rgb, ZoneWrite};
 
 /// One zone card: a zone of the device at index `device`, its checkbox and
 /// its colour.
@@ -105,6 +105,29 @@ pub fn turn_off(controllers: &mut [Box<dyn Controller>]) -> Vec<(usize, Error)> 
         })
         .collect();
     apply(controllers, Mode::Off, 1.0, &plans)
+}
+
+/// The colours [`test_colors`] shows, in order.
+pub const TEST_COLORS: [(&str, Rgb); 4] =
+    [("Red", [255, 0, 0]), ("Green", [0, 255, 0]), ("Blue", [0, 0, 255]), ("White", [255, 255, 255])];
+
+/// Light every LED of a device in red, green, blue and white, `hold` each,
+/// so that the user can see whether the device answers at all and whether
+/// its colour channels are in the right order. `on_step` gets the name of
+/// the colour about to be shown.
+pub fn test_colors(ctrl: &mut dyn Controller, hold: Duration, mut on_step: impl FnMut(&str)) -> Result<()> {
+    let zones = ctrl.zones();
+    let targets: Vec<u8> = match zones.iter().find(|z| z.is_all) {
+        Some(all) => vec![all.id],
+        None => zones.iter().map(|z| z.id).collect(),
+    };
+    for (label, color) in TEST_COLORS {
+        on_step(label);
+        let writes: Vec<ZoneWrite> = targets.iter().map(|&zone| ZoneWrite::lit(zone, color)).collect();
+        ctrl.apply(Mode::Static, 1, &writes)?;
+        sleep(hold);
+    }
+    Ok(())
 }
 
 /// The plans whose device cannot animate `mode` itself and therefore needs

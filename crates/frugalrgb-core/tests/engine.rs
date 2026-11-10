@@ -167,6 +167,33 @@ fn software_frames_match_the_python_engine() {
     }
 }
 
+#[test]
+fn device_test_paints_the_all_zone_in_each_test_colour() {
+    let (mut ctrl, calls) = multi_zone(true);
+    let mut shown = Vec::new();
+    engine::test_colors(ctrl.as_mut(), std::time::Duration::ZERO, |label| shown.push(label.to_string())).unwrap();
+
+    assert_eq!(shown, ["Red", "Green", "Blue", "White"]);
+    let expected: Vec<Call> = engine::TEST_COLORS
+        .iter()
+        .flat_map(|&(_, shade)| [Call::Mode(Mode::Static, 1), Call::Zones(vec![ZoneWrite::lit(0, shade)])])
+        .collect();
+    assert_eq!(*calls.lock().unwrap(), expected);
+}
+
+#[test]
+fn device_test_paints_every_zone_of_a_device_without_an_all_zone() {
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let mut fake = Fake {
+        zones: vec![Zone::new(0, "Left"), Zone::new(1, "Right")],
+        hardware: true,
+        calls: Arc::clone(&calls),
+    };
+    engine::test_colors(&mut fake, std::time::Duration::ZERO, |_| {}).unwrap();
+    let first = calls.lock().unwrap()[1].clone();
+    assert_eq!(first, Call::Zones(vec![ZoneWrite::lit(0, [255, 0, 0]), ZoneWrite::lit(1, [255, 0, 0])]));
+}
+
 mod worker {
     use std::sync::mpsc;
     use std::time::Duration;
@@ -221,6 +248,20 @@ mod worker {
         assert!(frames.iter().all(|f| f[1] == ZoneWrite::off(2) && f[0].zone == 1 && f[0].color.is_some()));
         // No mode change between frames
         assert_eq!(calls.iter().filter(|c| matches!(c, Call::Mode(..))).count(), 1);
+    }
+
+    #[test]
+    fn jobs_run_on_the_device_thread_with_the_devices() {
+        let (ctrl, calls) = multi_zone(true);
+        let worker = Worker::spawn(vec![ctrl], |_| {});
+        let (names, inbox) = mpsc::channel();
+        worker.send(Command::Run(Box::new(move |controllers| {
+            controllers[0].set_mode(Mode::Rainbow, 2).unwrap();
+            names.send(controllers[0].name().to_string()).unwrap();
+        })));
+        assert_eq!(inbox.recv_timeout(Duration::from_secs(5)).unwrap(), "Fake");
+        worker.shutdown(false);
+        assert_eq!(*calls.lock().unwrap(), [Call::Mode(Mode::Rainbow, 2)]);
     }
 
     #[test]

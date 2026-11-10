@@ -1,8 +1,12 @@
 //! The command-line commands: everything that needs no window.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
+#[cfg(unix)]
+use std::sync::atomic::Ordering;
 
-use frugalrgb_core::{detect, engine, store, Controller, DeviceInfo};
+use std::time::Duration;
+
+use frugalrgb_core::{detect, diagnostics, engine, store, Controller, DeviceInfo};
 
 static STOP: AtomicBool = AtomicBool::new(false);
 
@@ -38,6 +42,32 @@ pub fn list() -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// Print the diagnostics report: what a bug report should come with.
+pub fn diagnostics() -> Result<(), String> {
+    let mut hardware = detect::scan();
+    let report = diagnostics::report(&mut hardware.controllers, hardware.smbus.as_ref(), &crate::logging::recent());
+    print!("{report}");
+    Ok(())
+}
+
+/// Show red, green, blue and white on every device in turn.
+pub fn test() -> Result<(), String> {
+    let mut failures = Vec::new();
+    for ctrl in &mut devices()? {
+        let name = ctrl.name().to_string();
+        println!("{name}");
+        let shown = engine::test_colors(ctrl.as_mut(), Duration::from_millis(1300), |shade| println!("  {shade}"));
+        if let Err(e) = shown {
+            failures.push(format!("{name}: {e}"));
+        }
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(failures.join("\n"))
+    }
 }
 
 pub fn presets() -> Result<(), String> {

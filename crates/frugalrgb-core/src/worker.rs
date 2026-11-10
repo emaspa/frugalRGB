@@ -12,6 +12,9 @@ use std::time::{Duration, Instant};
 use crate::engine::{self, DevicePlan};
 use crate::{Controller, Correction, Mode, ZoneWrite};
 
+/// Work a front end wants done on the device thread.
+pub type Job = Box<dyn FnOnce(&mut [Box<dyn Controller>]) + Send>;
+
 pub enum Command {
     /// Set `mode` on the planned devices and write their zones.
     Apply { mode: Mode, speed: f64, plans: Vec<DevicePlan> },
@@ -20,6 +23,9 @@ pub enum Command {
     Calibrate { device: usize, correction: Correction },
     /// Store the current state in the flash of these devices.
     Save { devices: Vec<usize> },
+    /// Run a job with the devices: a diagnostics dump, a device test.
+    /// Software effects pause while it runs.
+    Run(Job),
     /// Stop the worker, optionally switching the lights off first.
     Shutdown { lights_off: bool },
 }
@@ -154,6 +160,7 @@ fn run(mut controllers: Vec<Box<dyn Controller>>, inbox: Receiver<Command>, repo
                     }
                     report(Event::Saved { failures: failed });
                 }
+                Command::Run(job) => job(&mut controllers),
                 Command::Shutdown { lights_off } => {
                     if lights_off {
                         engine::turn_off(&mut controllers);

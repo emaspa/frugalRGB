@@ -120,7 +120,7 @@ fn saving_keeps_settings_this_version_does_not_know() {
     let dir = std::env::temp_dir().join(format!("frugalrgb-store-test-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("config.json");
-    std::fs::write(&path, r#"{"startup_preset": "(none)", "window_geometry": "700x600+1+2"}"#).unwrap();
+    std::fs::write(&path, r#"{"startup_preset": "(none)", "from_the_future": "700x600+1+2"}"#).unwrap();
 
     let mut config = store::load_config(&path).unwrap();
     assert_eq!(config.startup_preset(), None);
@@ -129,7 +129,7 @@ fn saving_keeps_settings_this_version_does_not_know() {
 
     let again = store::load_config(&path).unwrap();
     assert!(again.off_on_close);
-    assert_eq!(again.other["window_geometry"], "700x600+1+2");
+    assert_eq!(again.other["from_the_future"], "700x600+1+2");
     assert!(!dir.join("config.json.tmp").exists());
 
     // A missing file is a default, a broken one is an error
@@ -137,4 +137,19 @@ fn saving_keeps_settings_this_version_does_not_know() {
     std::fs::write(&path, "{ not json").unwrap();
     assert!(store::load_config(&path).is_err());
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn window_size_comes_from_the_geometry_the_python_app_wrote() {
+    let config: Config = serde_json::from_str(r#"{"window_geometry": "947x1007+3284+1463"}"#).unwrap();
+    assert_eq!(config.window_size(), Some((947, 1007)));
+
+    let mut config = Config::default();
+    assert_eq!(config.window_size(), None);
+    config.set_window_size(860, 680);
+    assert_eq!(config.window_size(), Some((860, 680)));
+
+    // Nonsense from a hand-edited file is ignored
+    let config: Config = serde_json::from_str(r#"{"window_geometry": "1x1+0+0"}"#).unwrap();
+    assert_eq!(config.window_size(), None);
 }

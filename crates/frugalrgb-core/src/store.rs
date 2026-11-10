@@ -16,7 +16,7 @@ use crate::{Controller, Correction, DeviceInfo, Error, Mode, Result, Rgb, Zone};
 /// The preset name that means "no preset".
 pub const NO_PRESET: &str = "(none)";
 
-fn home() -> PathBuf {
+pub(crate) fn home() -> PathBuf {
     std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
         .map(PathBuf::from)
@@ -139,6 +139,9 @@ pub struct Config {
     pub start_minimized: bool,
     #[serde(default = "no_preset")]
     pub startup_preset: String,
+    /// Window size and position as `WIDTHxHEIGHT+X+Y`, in pixels.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub window_geometry: Option<String>,
     /// Settings this version does not know are kept as they are.
     #[serde(flatten)]
     pub other: IndexMap<String, serde_json::Value>,
@@ -152,6 +155,7 @@ impl Default for Config {
             minimize_to_tray: false,
             start_minimized: false,
             startup_preset: no_preset(),
+            window_geometry: None,
             other: IndexMap::new(),
         }
     }
@@ -161,6 +165,18 @@ impl Config {
     /// The preset to apply at startup, if one is chosen.
     pub fn startup_preset(&self) -> Option<&str> {
         Some(self.startup_preset.as_str()).filter(|name| !name.is_empty() && *name != NO_PRESET)
+    }
+
+    /// The saved window size, if there is a sensible one.
+    pub fn window_size(&self) -> Option<(u32, u32)> {
+        let size = self.window_geometry.as_deref()?.split('+').next()?;
+        let (width, height) = size.split_once('x')?;
+        let (width, height) = (width.parse().ok()?, height.parse().ok()?);
+        (width >= 200 && height >= 200).then_some((width, height))
+    }
+
+    pub fn set_window_size(&mut self, width: u32, height: u32) {
+        self.window_geometry = Some(format!("{width}x{height}+0+0"));
     }
 
     /// Hand each device its calibration.

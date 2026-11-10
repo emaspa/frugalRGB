@@ -163,13 +163,47 @@ component LabelledSlider inherits HorizontalLayout {
     }
 }
 
+// A box over the dimmed window. Nothing underneath can be clicked.
+component Modal inherits Rectangle {
+    in property <string> title;
+
+    background: #000000c0;
+
+    TouchArea { }
+
+    Rectangle {
+        width: 500px;
+        height: box.preferred-height;
+        border-radius: 10px;
+        border-width: 1px;
+        border-color: #ffffff30;
+        background: Palette.background;
+
+        box := VerticalLayout {
+            padding: 20px;
+            spacing: 14px;
+
+            Text {
+                text: root.title;
+                font-size: 16px;
+                font-weight: 700;
+            }
+
+            @children
+        }
+    }
+}
+
 export component MainWindow inherits Window {
     title: "frugalRGB - no bloat, just LEDs";
     icon: root.app-icon;
-    preferred-width: 860px;
-    preferred-height: 680px;
+    // The size to open at: the one saved last time, when there is one
+    in property <length> start-width: 860px;
+    in property <length> start-height: 680px;
+    preferred-width: root.start-width;
+    preferred-height: root.start-height;
+    // No minimum height: the layout knows how much room it needs
     min-width: 720px;
-    min-height: 560px;
 
     in property <image> app-icon;
     in property <string> version;
@@ -240,6 +274,20 @@ export component MainWindow inherits Window {
 
     // 0 = hidden, 1 = explain the risk, 2 = last confirmation
     property <int> confirm-step;
+
+    // A message the user has to dismiss; empty when there is none.
+    in-out property <string> notice;
+    in property <bool> diagnostics-running;
+    callback diagnostics();
+
+    // The device test: red, green, blue and white on one device.
+    in-out property <bool> test-open;
+    in-out property <int> test-device;
+    in property <string> test-facts;
+    in property <string> test-status;
+    in property <bool> test-running;
+    callback test-device-changed();
+    callback run-test();
 
     VerticalLayout {
         padding: 14px;
@@ -620,7 +668,6 @@ export component MainWindow inherits Window {
         // -- Options --
         HorizontalLayout {
             spacing: 18px;
-            alignment: start;
             CheckBox {
                 text: "Off on close";
                 checked <=> root.off-on-close;
@@ -654,66 +701,171 @@ export component MainWindow inherits Window {
                     root.start-at-login-toggled(root.start-at-login);
                 }
             }
+
+            Rectangle {
+                horizontal-stretch: 1;
+            }
+
+            Button {
+                text: "Device Test";
+                clicked => {
+                    root.test-device-changed();
+                    root.test-open = true;
+                }
+            }
+
+            Button {
+                text: "Diagnostics";
+                enabled: !root.diagnostics-running;
+                clicked => {
+                    root.diagnostics();
+                }
+            }
         }
     }
 
     // -- Save to hardware: two confirmations, as flash writes are for keeps --
-    if root.confirm-step > 0: Rectangle {
-        background: #000000c0;
+    if root.confirm-step > 0: Modal {
+        title: root.confirm-step == 1 ? "Save to Hardware" : "Final confirmation";
 
-        // Swallow clicks so nothing underneath can be pressed
-        TouchArea { }
+        Text {
+            wrap: word-wrap;
+            text: root.confirm-step == 1
+                ? "This writes the current color and mode to the non-volatile flash memory of these devices:\n\n" + root.save-targets + "\n\nThe saved settings persist across power cycles (boot color). On RAM sticks this is known to be unstable with some ENE firmware versions and may in rare cases soft-lock the RGB controller, requiring a DIMM reseat to recover.\n\nMake sure you have already applied the color you want."
+                : "Are you absolutely sure? This writes to hardware flash and cannot be undone easily.";
+        }
 
-        Rectangle {
-            width: 500px;
-            height: confirm-box.preferred-height;
-            border-radius: 10px;
-            border-width: 1px;
-            border-color: #ffffff30;
-            background: Palette.background;
-
-            confirm-box := VerticalLayout {
-                padding: 20px;
-                spacing: 14px;
-
-                Text {
-                    text: root.confirm-step == 1 ? "Save to Hardware" : "Final confirmation";
-                    font-size: 16px;
-                    font-weight: 700;
+        HorizontalLayout {
+            spacing: 8px;
+            Button {
+                text: "Cancel";
+                clicked => {
+                    root.confirm-step = 0;
                 }
+            }
 
-                Text {
-                    wrap: word-wrap;
-                    text: root.confirm-step == 1
-                        ? "This writes the current color and mode to the non-volatile flash memory of these devices:\n\n" + root.save-targets + "\n\nThe saved settings persist across power cycles (boot color). On RAM sticks this is known to be unstable with some ENE firmware versions and may in rare cases soft-lock the RGB controller, requiring a DIMM reseat to recover.\n\nMake sure you have already applied the color you want."
-                        : "Are you absolutely sure? This writes to hardware flash and cannot be undone easily.";
+            Rectangle {
+                horizontal-stretch: 1;
+            }
+
+            Button {
+                text: root.confirm-step == 1 ? "I understand, continue" : "Save to Hardware";
+                primary: root.confirm-step == 2;
+                clicked => {
+                    if (root.confirm-step == 1) {
+                        root.confirm-step = 2;
+                    } else {
+                        root.confirm-step = 0;
+                        root.save-to-hardware();
+                    }
                 }
+            }
+        }
+    }
 
-                HorizontalLayout {
-                    spacing: 8px;
-                    Button {
-                        text: "Cancel";
-                        clicked => {
-                            root.confirm-step = 0;
-                        }
-                    }
+    // -- Device test --
+    if root.test-open: Modal {
+        title: "Device Test";
 
-                    Rectangle {
-                        horizontal-stretch: 1;
-                    }
+        if root.devices.length == 0: Text {
+            wrap: word-wrap;
+            text: root.no-devices-hint;
+        }
 
-                    Button {
-                        text: root.confirm-step == 1 ? "I understand, continue" : "Save to Hardware";
-                        primary: root.confirm-step == 2;
-                        clicked => {
-                            if (root.confirm-step == 1) {
-                                root.confirm-step = 2;
-                            } else {
-                                root.confirm-step = 0;
-                                root.save-to-hardware();
-                            }
-                        }
-                    }
+        if root.devices.length > 0: ComboBox {
+            model: root.devices;
+            enabled: !root.test-running;
+            current-index <=> root.test-device;
+            selected => {
+                root.test-device-changed();
+            }
+        }
+
+        if root.devices.length > 0: Text {
+            wrap: word-wrap;
+            text: root.test-facts;
+        }
+
+        if root.devices.length > 0: Text {
+            wrap: word-wrap;
+            text: root.test-status == "" ? "The test shows red, green, blue and white on every LED of the device, then puts your colors back." : root.test-status;
+            color: Palette.foreground.transparentize(0.3);
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            Button {
+                text: "Close";
+                enabled: !root.test-running;
+                clicked => {
+                    root.test-open = false;
+                }
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+            }
+
+            if root.devices.length > 0: Button {
+                text: "Run Test";
+                primary: true;
+                enabled: !root.test-running;
+                clicked => {
+                    root.run-test();
+                }
+            }
+        }
+    }
+
+    // -- A message to acknowledge --
+    if root.notice != "": Modal {
+        title: "frugalRGB";
+
+        Text {
+            wrap: word-wrap;
+            text: root.notice;
+        }
+
+        HorizontalLayout {
+            alignment: end;
+            Button {
+                text: "OK";
+                primary: true;
+                clicked => {
+                    root.notice = "";
+                }
+            }
+        }
+    }
+}
+
+// Shown instead of the main window when there is nothing else to show,
+// such as a second copy being started.
+export component NoticeWindow inherits Window {
+    in property <string> message;
+    in property <image> app-icon;
+    callback dismissed();
+
+    title: "frugalRGB";
+    icon: root.app-icon;
+    width: 380px;
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 16px;
+
+        Text {
+            wrap: word-wrap;
+            text: root.message;
+        }
+
+        HorizontalLayout {
+            alignment: end;
+            Button {
+                text: "OK";
+                primary: true;
+                clicked => {
+                    root.dismissed();
                 }
             }
         }

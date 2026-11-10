@@ -29,3 +29,7 @@ libc = "0.2"
 
 [build-dependencies]
 slint-build = { version = "1.18", optional = true }
+
+# Puts the icon into the .exe
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"

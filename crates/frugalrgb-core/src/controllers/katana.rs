@@ -318,6 +318,10 @@ fn palette_entry([r, g, b]: Rgb) -> [u8; 4] {
 }
 
 impl Controller for Katana {
+    fn facts(&self) -> Vec<(&'static str, String)> {
+        vec![("Firmware", self.firmware.clone()), ("Lighting profile", self.profile.to_string())]
+    }
+
     fn name(&self) -> &str {
         "Sound BlasterX Katana"
     }
