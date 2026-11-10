@@ -1,4 +1,7 @@
-"""Record what the Python controllers send, as fixtures for the Rust port.
+"""Record what the Python controllers send, as fixtures for the Rust drivers.
+
+The Python controllers in tools/reference are what frugalRGB shipped up to
+0.3.0. They are kept as the reference the Rust drivers were ported from.
 
 Each controller is driven through a set of scenarios against a fake device.
 Everything it writes, and every reply the fake hands back, is recorded in
@@ -14,7 +17,7 @@ import sys
 import types
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tools" / "reference"))
 
 OUT = ROOT / "crates" / "frugalrgb-core" / "tests" / "golden"
 
