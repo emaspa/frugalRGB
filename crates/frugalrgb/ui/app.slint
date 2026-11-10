@@ -1,0 +1,1069 @@
+import { Button, CheckBox, ComboBox, LineEdit, Palette, ScrollView, Slider } from "std-widgets.slint";
+
+// One zone of a device, as a row in the zone list.
+export struct ZoneCard {
+    device: string,
+    zone: string,
+    // First zone of its device: the device name is shown above it.
+    header: bool,
+    enabled: bool,
+    color: color,
+}
+
+// A checkbox with no state of its own: it shows what the model says, so a
+// preset loaded from code can never disagree with what is on screen.
+component Check inherits Rectangle {
+    in property <bool> checked;
+    callback toggled(bool);
+
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border-width: 1.5px;
+    border-color: root.checked ? Palette.accent-background : #7a8090;
+    background: touch.has-hover ? #ffffff18 : transparent;
+
+    Rectangle {
+        width: 10px;
+        height: 10px;
+        border-radius: 2px;
+        background: root.checked ? Palette.accent-background : transparent;
+    }
+
+    touch := TouchArea {
+        clicked => {
+            root.toggled(!root.checked);
+        }
+    }
+}
+
+component ZoneRow inherits Rectangle {
+    in property <ZoneCard> card;
+    callback toggled(bool);
+    callback painted();
+
+    height: 30px;
+    border-radius: 6px;
+    background: #ffffff0a;
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 10px;
+
+        VerticalLayout {
+            alignment: center;
+            Check {
+                checked: root.card.enabled;
+                toggled(on) => {
+                    root.toggled(on);
+                }
+            }
+        }
+
+        Text {
+            text: root.card.zone;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+            color: root.card.enabled ? Palette.foreground : Palette.foreground.transparentize(0.55);
+        }
+
+        VerticalLayout {
+            alignment: center;
+            // The zone's colour. Clicking it paints the zone with the brush.
+            Rectangle {
+                width: 46px;
+                height: 18px;
+                border-radius: 4px;
+                border-width: 1px;
+                border-color: swatch-touch.has-hover ? #ffffff : #ffffff40;
+                background: root.card.color;
+                opacity: root.card.enabled ? 1 : 0.3;
+
+                swatch-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.painted();
+                    }
+                }
+            }
+        }
+    }
+}
+
+component Heading inherits Text {
+    font-size: 11px;
+    font-weight: 700;
+    color: Palette.foreground.transparentize(0.45);
+}
+
+component ColorButton inherits Rectangle {
+    in property <color> shade;
+    in property <string> label;
+    callback picked(color);
+
+    height: 26px;
+    horizontal-stretch: 1;
+    border-radius: 5px;
+    border-width: 1px;
+    border-color: touch.has-hover ? #ffffff : #ffffff30;
+    background: root.shade;
+
+    Text {
+        text: root.label;
+        font-size: 11px;
+        // Dark text on the bright shades
+        color: root.shade.to-hsv().value > 0.8 && (root.shade.to-hsv().saturation < 0.5 || root.shade.green > 180) ? #101010 : #ffffff;
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.picked(root.shade);
+        }
+    }
+}
+
+component LabelledSlider inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> readout;
+    in property <float> minimum: 0;
+    in property <float> maximum: 1;
+    in-out property <float> value;
+    callback changed();
+    callback released();
+
+    spacing: 8px;
+
+    Text {
+        text: root.label;
+        width: 14px;
+        vertical-alignment: center;
+    }
+
+    Slider {
+        minimum: root.minimum;
+        maximum: root.maximum;
+        value <=> root.value;
+        changed => {
+            root.changed();
+        }
+        released => {
+            root.released();
+        }
+    }
+
+    Text {
+        text: root.readout;
+        width: 40px;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+        color: Palette.foreground.transparentize(0.3);
+    }
+}
+
+// A box over the dimmed window. Nothing underneath can be clicked.
+component Modal inherits Rectangle {
+    in property <string> title;
+
+    background: #000000c0;
+
+    TouchArea { }
+
+    Rectangle {
+        width: 500px;
+        height: box.preferred-height;
+        border-radius: 10px;
+        border-width: 1px;
+        border-color: #ffffff30;
+        background: Palette.background;
+
+        box := VerticalLayout {
+            padding: 20px;
+            spacing: 14px;
+
+            Text {
+                text: root.title;
+                font-size: 16px;
+                font-weight: 700;
+            }
+
+            @children
+        }
+    }
+}
+
+// Brand marks from Simple Icons (CC0), drawn in a 24 by 24 box.
+global Marks {
+    out property <string> github: "M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12";
+    out property <string> coffee: "M20.216 6.415l-.132-.666c-.119-.598-.388-1.163-1.001-1.379-.197-.069-.42-.098-.57-.241-.152-.143-.196-.366-.231-.572-.065-.378-.125-.756-.192-1.133-.057-.325-.102-.69-.25-.987-.195-.4-.597-.634-.996-.788a5.723 5.723 0 00-.626-.194c-1-.263-2.05-.36-3.077-.416a25.834 25.834 0 00-3.7.062c-.915.083-1.88.184-2.75.5-.318.116-.646.256-.888.501-.297.302-.393.77-.177 1.146.154.267.415.456.692.58.36.162.737.284 1.123.366 1.075.238 2.189.331 3.287.37 1.218.05 2.437.01 3.65-.118.299-.033.598-.073.896-.119.352-.054.578-.513.474-.834-.124-.383-.457-.531-.834-.473-.466.074-.96.108-1.382.146-1.177.08-2.358.082-3.536.006a22.228 22.228 0 01-1.157-.107c-.086-.01-.18-.025-.258-.036-.243-.036-.484-.08-.724-.13-.111-.027-.111-.185 0-.212h.005c.277-.06.557-.108.838-.147h.002c.131-.009.263-.032.394-.048a25.076 25.076 0 013.426-.12c.674.019 1.347.067 2.017.144l.228.031c.267.04.533.088.798.145.392.085.895.113 1.07.542.055.137.08.288.111.431l.319 1.484a.237.237 0 01-.199.284h-.003c-.037.006-.075.01-.112.015a36.704 36.704 0 01-4.743.295 37.059 37.059 0 01-4.699-.304c-.14-.017-.293-.042-.417-.06-.326-.048-.649-.108-.973-.161-.393-.065-.768-.032-1.123.161-.29.16-.527.404-.675.701-.154.316-.199.66-.267 1-.069.34-.176.707-.135 1.056.087.753.613 1.365 1.37 1.502a39.69 39.69 0 0011.343.376.483.483 0 01.535.53l-.071.697-1.018 9.907c-.041.41-.047.832-.125 1.237-.122.637-.553 1.028-1.182 1.171-.577.131-1.165.2-1.756.205-.656.004-1.31-.025-1.966-.022-.699.004-1.556-.06-2.095-.58-.475-.458-.54-1.174-.605-1.793l-.731-7.013-.322-3.094c-.037-.351-.286-.695-.678-.678-.336.015-.718.3-.678.679l.228 2.185.949 9.112c.147 1.344 1.174 2.068 2.446 2.272.742.12 1.503.144 2.257.156.966.016 1.942.053 2.892-.122 1.408-.258 2.465-1.198 2.616-2.657.34-3.332.683-6.663 1.024-9.995l.215-2.087a.484.484 0 01.39-.426c.402-.078.787-.212 1.074-.518.455-.488.546-1.124.385-1.766zm-1.478.772c-.145.137-.363.201-.578.233-2.416.359-4.866.54-7.308.46-1.748-.06-3.477-.254-5.207-.498-.17-.024-.353-.055-.47-.18-.22-.236-.111-.71-.054-.995.052-.26.152-.609.463-.646.484-.057 1.046.148 1.526.22.577.088 1.156.159 1.737.212 2.48.226 5.002.19 7.472-.14.45-.06.899-.13 1.345-.21.399-.072.84-.206 1.08.206.166.281.188.657.162.974a.544.544 0 01-.169.364zm-6.159 3.9c-.862.37-1.84.788-3.109.788a5.884 5.884 0 01-1.569-.217l.877 9.004c.065.78.717 1.38 1.5 1.38 0 0 1.243.065 1.658.065.447 0 1.786-.065 1.786-.065.783 0 1.434-.6 1.499-1.38l.94-9.95a3.996 3.996 0 00-1.322-.238c-.826 0-1.491.284-2.26.613z";
+    out property <string> kofi: "M11.351 2.715c-2.7 0-4.986.025-6.83.26C2.078 3.285 0 5.154 0 8.61c0 3.506.182 6.13 1.585 8.493 1.584 2.701 4.233 4.182 7.662 4.182h.83c4.209 0 6.494-2.234 7.637-4a9.5 9.5 0 0 0 1.091-2.338C21.792 14.688 24 12.22 24 9.208v-.415c0-3.247-2.13-5.507-5.792-5.87-1.558-.156-2.65-.208-6.857-.208m0 1.947c4.208 0 5.09.052 6.571.182 2.624.311 4.13 1.584 4.13 4v.39c0 2.156-1.792 3.844-3.87 3.844h-.935l-.156.649c-.208 1.013-.597 1.818-1.039 2.546-.909 1.428-2.545 3.064-5.922 3.064h-.805c-2.571 0-4.831-.883-6.078-3.195-1.09-2-1.298-4.155-1.298-7.506 0-2.181.857-3.402 3.012-3.714 1.533-.233 3.559-.26 6.39-.26m6.547 2.287c-.416 0-.65.234-.65.546v2.935c0 .311.234.545.65.545 1.324 0 2.051-.754 2.051-2s-.727-2.026-2.052-2.026m-10.39.182c-1.818 0-3.013 1.48-3.013 3.142 0 1.533.858 2.857 1.949 3.897.727.701 1.87 1.429 2.649 1.896a1.47 1.47 0 0 0 1.507 0c.78-.467 1.922-1.195 2.623-1.896 1.117-1.039 1.974-2.364 1.974-3.897 0-1.662-1.247-3.142-3.039-3.142-1.065 0-1.792.545-2.338 1.298-.493-.753-1.246-1.298-2.312-1.298";
+}
+
+// A line in the About box that opens a web page.
+component LinkRow inherits Rectangle {
+    in property <string> mark;
+    in property <string> label;
+    callback clicked();
+
+    property <color> ink: touch.has-hover ? Palette.foreground : Palette.accent-background;
+
+    height: 26px;
+
+    HorizontalLayout {
+        alignment: start;
+        spacing: 9px;
+
+        VerticalLayout {
+            alignment: center;
+            Path {
+                width: 16px;
+                height: 16px;
+                viewbox-width: 24;
+                viewbox-height: 24;
+                commands: root.mark;
+                fill: root.ink;
+            }
+        }
+
+        Text {
+            text: root.label;
+            vertical-alignment: center;
+            color: root.ink;
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+export component MainWindow inherits Window {
+    title: "frugalRGB - no bloat, just LEDs";
+    icon: root.app-icon;
+    // The size to open at: the one saved last time, when there is one
+    in property <length> start-width: 860px;
+    in property <length> start-height: 680px;
+    preferred-width: root.start-width;
+    preferred-height: root.start-height;
+    // No minimum height: the layout knows how much room it needs
+    min-width: 720px;
+
+    in property <image> app-icon;
+    in property <string> version;
+    in property <string> status;
+    // Shown instead of the zone list when no device was found.
+    in property <string> no-devices-hint;
+
+    in property <[ZoneCard]> cards;
+    callback card-toggled(int, bool);
+    callback card-painted(int);
+
+    // The brush: the colour that the checked zones are painted with.
+    in-out property <float> hue;
+    in-out property <float> saturation;
+    in-out property <float> brightness: 1;
+    out property <color> brush: hsv(root.hue, root.saturation, root.brightness);
+    in property <string> brush-text;
+    // The user changed the brush (as opposed to a preset setting it).
+    callback brush-picked();
+    callback hex-entered(string);
+
+    public function set-brush(shade: color) {
+        // Black and greys have no hue of their own: keep the slider put
+        if (shade.to-hsv().saturation > 0 && shade.to-hsv().value > 0) {
+            root.hue = shade.to-hsv().hue;
+        }
+        root.saturation = shade.to-hsv().saturation;
+        root.brightness = shade.to-hsv().value;
+    }
+
+    in property <[string]> effects;
+    in-out property <int> effect-index;
+    in-out property <float> speed: 1.0;
+    callback effect-changed();
+
+    in property <[string]> devices;
+    in-out property <int> calibration-device;
+    in-out property <float> cal-r: 1;
+    in-out property <float> cal-g: 1;
+    in-out property <float> cal-b: 1;
+    callback calibration-device-changed();
+    callback calibration-changed();
+    callback calibration-released();
+
+    in property <[string]> presets;
+    in-out property <int> preset-index;
+    in-out property <int> startup-index;
+    in-out property <string> preset-name;
+    callback preset-selected(string);
+    callback save-preset(string);
+    callback delete-preset();
+    callback startup-preset-changed(string);
+
+    in-out property <bool> off-on-close;
+    in-out property <bool> close-to-tray;
+    in-out property <bool> start-minimized;
+    in-out property <bool> start-at-login;
+    in property <bool> tray-available;
+    in property <bool> autostart-supported;
+    callback options-changed();
+    callback start-at-login-toggled(bool);
+
+    in property <bool> can-save-hardware;
+    in property <string> save-targets;
+    callback apply();
+    callback leds-off();
+    callback save-to-hardware();
+
+    // 0 = hidden, 1 = explain the risk, 2 = last confirmation
+    property <int> confirm-step;
+
+    // A message the user has to dismiss; empty when there is none.
+    in-out property <string> notice;
+    in property <bool> diagnostics-running;
+    callback diagnostics();
+
+    // The device test: red, green, blue and white on one device.
+    in-out property <bool> test-open;
+    in-out property <int> test-device;
+    in property <string> test-facts;
+    in property <string> test-status;
+    in property <bool> test-running;
+    callback test-device-changed();
+    callback run-test();
+
+    // The tray's Quit entry.
+    callback quit-requested();
+
+    property <bool> about-open;
+    // 0 = the repository, 1 = Buy Me a Coffee, 2 = Ko-fi
+    callback open-link(int);
+
+    VerticalLayout {
+        padding: 14px;
+        spacing: 12px;
+
+        HorizontalLayout {
+            spacing: 10px;
+            Text {
+                text: "frugalRGB";
+                font-size: 22px;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+
+            Text {
+                text: "no bloat, just LEDs";
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+                color: Palette.foreground.transparentize(0.45);
+            }
+
+            Text {
+                text: root.version;
+                vertical-alignment: center;
+                color: Palette.foreground.transparentize(0.45);
+            }
+
+            Button {
+                text: "About";
+                clicked => {
+                    root.about-open = true;
+                }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 14px;
+            vertical-stretch: 1;
+
+            // -- Zones --
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 6px;
+
+                Heading {
+                    text: "ZONES";
+                }
+
+                if root.cards.length == 0: Text {
+                    text: root.no-devices-hint;
+                    wrap: word-wrap;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    vertical-stretch: 1;
+                    color: Palette.foreground.transparentize(0.45);
+                }
+
+                if root.cards.length > 0: ScrollView {
+                    vertical-stretch: 1;
+                    min-width: 300px;
+
+                    VerticalLayout {
+                        alignment: start;
+                        spacing: 4px;
+                        padding-right: 12px;
+
+                        for card[index] in root.cards: VerticalLayout {
+                            spacing: 4px;
+                            if card.header: Text {
+                                text: card.device;
+                                font-weight: 700;
+                                height: 26px;
+                                vertical-alignment: bottom;
+                                overflow: elide;
+                            }
+                            ZoneRow {
+                                card: card;
+                                toggled(on) => {
+                                    root.card-toggled(index, on);
+                                }
+                                painted => {
+                                    root.card-painted(index);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // -- Colour, effect, calibration --
+            VerticalLayout {
+                width: 370px;
+                alignment: start;
+                spacing: 8px;
+
+                Heading {
+                    text: "COLOR";
+                }
+
+                HorizontalLayout {
+                    spacing: 12px;
+
+                    Rectangle {
+                        width: 64px;
+                        border-radius: 8px;
+                        border-width: 1px;
+                        border-color: #ffffff40;
+                        background: root.brush;
+                    }
+
+                    VerticalLayout {
+                        spacing: 4px;
+                        LabelledSlider {
+                            label: "H";
+                            maximum: 360;
+                            readout: round(root.hue) + "°";
+                            value <=> root.hue;
+                            changed => {
+                                root.brush-picked();
+                            }
+                        }
+
+                        LabelledSlider {
+                            label: "S";
+                            readout: round(root.saturation * 100) + "%";
+                            value <=> root.saturation;
+                            changed => {
+                                root.brush-picked();
+                            }
+                        }
+
+                        LabelledSlider {
+                            label: "V";
+                            readout: round(root.brightness * 100) + "%";
+                            value <=> root.brightness;
+                            changed => {
+                                root.brush-picked();
+                            }
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    Text {
+                        text: root.brush-text;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                        color: Palette.foreground.transparentize(0.3);
+                    }
+
+                    hex := LineEdit {
+                        width: 150px;
+                        placeholder-text: "#RRGGBB or R,G,B";
+                        accepted(text) => {
+                            root.hex-entered(text);
+                            self.text = "";
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 4px;
+                    for shade in [
+                        { label: "Red", shade: #ff0000 },
+                        { label: "Green", shade: #00ff00 },
+                        { label: "Blue", shade: #0000ff },
+                        { label: "Cyan", shade: #00ffff },
+                        { label: "Purple", shade: #8000ff },
+                    ]: ColorButton {
+                        label: shade.label;
+                        shade: shade.shade;
+                        picked(c) => {
+                            root.set-brush(c);
+                            root.brush-picked();
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 4px;
+                    for shade in [
+                        { label: "Orange", shade: #ff8000 },
+                        { label: "White", shade: #ffffff },
+                        { label: "Warm", shade: #ffb060 },
+                        { label: "Black", shade: #000000 },
+                    ]: ColorButton {
+                        label: shade.label;
+                        shade: shade.shade;
+                        picked(c) => {
+                            root.set-brush(c);
+                            root.brush-picked();
+                        }
+                    }
+                }
+
+                Text {
+                    text: "The brush paints every checked zone. Click a zone's swatch to paint only that zone. Unchecked zones are switched off.";
+                    wrap: word-wrap;
+                    font-size: 11px;
+                    color: Palette.foreground.transparentize(0.45);
+                }
+
+                Rectangle {
+                    height: 4px;
+                }
+
+                Heading {
+                    text: "EFFECT";
+                }
+
+                HorizontalLayout {
+                    spacing: 10px;
+                    ComboBox {
+                        width: 140px;
+                        model: root.effects;
+                        current-index <=> root.effect-index;
+                        selected => {
+                            root.effect-changed();
+                        }
+                    }
+
+                    Text {
+                        text: "Speed";
+                        vertical-alignment: center;
+                    }
+
+                    Slider {
+                        minimum: 0.2;
+                        maximum: 3.0;
+                        value <=> root.speed;
+                    }
+                }
+
+                Rectangle {
+                    height: 4px;
+                }
+
+                Heading {
+                    text: "CALIBRATION";
+                }
+
+                ComboBox {
+                    model: root.devices;
+                    enabled: root.devices.length > 0;
+                    current-index <=> root.calibration-device;
+                    selected => {
+                        root.calibration-device-changed();
+                    }
+                }
+
+                LabelledSlider {
+                    label: "R";
+                    minimum: 0.1;
+                    readout: round(root.cal-r * 100) + "%";
+                    value <=> root.cal-r;
+                    changed => {
+                        root.calibration-changed();
+                    }
+                    released => {
+                        root.calibration-released();
+                    }
+                }
+
+                LabelledSlider {
+                    label: "G";
+                    minimum: 0.1;
+                    readout: round(root.cal-g * 100) + "%";
+                    value <=> root.cal-g;
+                    changed => {
+                        root.calibration-changed();
+                    }
+                    released => {
+                        root.calibration-released();
+                    }
+                }
+
+                LabelledSlider {
+                    label: "B";
+                    minimum: 0.1;
+                    readout: round(root.cal-b * 100) + "%";
+                    value <=> root.cal-b;
+                    changed => {
+                        root.calibration-changed();
+                    }
+                    released => {
+                        root.calibration-released();
+                    }
+                }
+            }
+        }
+
+        // -- Actions --
+        HorizontalLayout {
+            spacing: 8px;
+            Button {
+                text: "Apply";
+                primary: true;
+                width: 110px;
+                clicked => {
+                    root.apply();
+                }
+            }
+
+            Button {
+                text: "LEDs Off";
+                width: 100px;
+                clicked => {
+                    root.leds-off();
+                }
+            }
+
+            Text {
+                text: root.status;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+                overflow: elide;
+                color: Palette.foreground.transparentize(0.3);
+            }
+
+            if root.can-save-hardware: Button {
+                text: "Save to Hardware";
+                clicked => {
+                    root.confirm-step = 1;
+                }
+            }
+        }
+
+        // -- Presets --
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: "Preset";
+                vertical-alignment: center;
+            }
+
+            ComboBox {
+                width: 170px;
+                model: root.presets;
+                current-index <=> root.preset-index;
+                selected(name) => {
+                    root.preset-selected(name);
+                }
+            }
+
+            LineEdit {
+                horizontal-stretch: 1;
+                placeholder-text: "Name for a new preset";
+                text <=> root.preset-name;
+                accepted => {
+                    root.save-preset(root.preset-name);
+                }
+            }
+
+            Button {
+                text: "Save";
+                clicked => {
+                    root.save-preset(root.preset-name);
+                }
+            }
+
+            Button {
+                text: "Delete";
+                enabled: root.preset-index > 0;
+                clicked => {
+                    root.delete-preset();
+                }
+            }
+
+            Text {
+                text: "On start";
+                vertical-alignment: center;
+            }
+
+            ComboBox {
+                width: 150px;
+                model: root.presets;
+                current-index <=> root.startup-index;
+                selected(name) => {
+                    root.startup-preset-changed(name);
+                }
+            }
+        }
+
+        // -- Options --
+        HorizontalLayout {
+            spacing: 18px;
+            CheckBox {
+                text: "Off on close";
+                checked <=> root.off-on-close;
+                toggled => {
+                    root.options-changed();
+                }
+            }
+
+            CheckBox {
+                text: "Close to tray";
+                enabled: root.tray-available;
+                checked <=> root.close-to-tray;
+                toggled => {
+                    root.options-changed();
+                }
+            }
+
+            CheckBox {
+                text: "Start minimized";
+                enabled: root.tray-available;
+                checked <=> root.start-minimized;
+                toggled => {
+                    root.options-changed();
+                }
+            }
+
+            if root.autostart-supported: CheckBox {
+                text: "Start at login";
+                checked <=> root.start-at-login;
+                toggled => {
+                    root.start-at-login-toggled(root.start-at-login);
+                }
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+            }
+
+            Button {
+                text: "Device Test";
+                clicked => {
+                    root.test-device-changed();
+                    root.test-open = true;
+                }
+            }
+
+            Button {
+                text: "Diagnostics";
+                enabled: !root.diagnostics-running;
+                clicked => {
+                    root.diagnostics();
+                }
+            }
+        }
+    }
+
+    // -- Save to hardware: two confirmations, as flash writes are for keeps --
+    if root.confirm-step > 0: Modal {
+        title: root.confirm-step == 1 ? "Save to Hardware" : "Final confirmation";
+
+        Text {
+            wrap: word-wrap;
+            text: root.confirm-step == 1
+                ? "This writes the current color and mode to the non-volatile flash memory of these devices:\n\n" + root.save-targets + "\n\nThe saved settings persist across power cycles (boot color). On RAM sticks this is known to be unstable with some ENE firmware versions and may in rare cases soft-lock the RGB controller, requiring a DIMM reseat to recover.\n\nMake sure you have already applied the color you want."
+                : "Are you absolutely sure? This writes to hardware flash and cannot be undone easily.";
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            Button {
+                text: "Cancel";
+                clicked => {
+                    root.confirm-step = 0;
+                }
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+            }
+
+            Button {
+                text: root.confirm-step == 1 ? "I understand, continue" : "Save to Hardware";
+                primary: root.confirm-step == 2;
+                clicked => {
+                    if (root.confirm-step == 1) {
+                        root.confirm-step = 2;
+                    } else {
+                        root.confirm-step = 0;
+                        root.save-to-hardware();
+                    }
+                }
+            }
+        }
+    }
+
+    // -- Device test --
+    if root.test-open: Modal {
+        title: "Device Test";
+
+        if root.devices.length == 0: Text {
+            wrap: word-wrap;
+            text: root.no-devices-hint;
+        }
+
+        if root.devices.length > 0: ComboBox {
+            model: root.devices;
+            enabled: !root.test-running;
+            current-index <=> root.test-device;
+            selected => {
+                root.test-device-changed();
+            }
+        }
+
+        if root.devices.length > 0: Text {
+            wrap: word-wrap;
+            text: root.test-facts;
+        }
+
+        if root.devices.length > 0: Text {
+            wrap: word-wrap;
+            text: root.test-status == "" ? "The test shows red, green, blue and white on every LED of the device, then puts your colors back." : root.test-status;
+            color: Palette.foreground.transparentize(0.3);
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            Button {
+                text: "Close";
+                enabled: !root.test-running;
+                clicked => {
+                    root.test-open = false;
+                }
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+            }
+
+            if root.devices.length > 0: Button {
+                text: "Run Test";
+                primary: true;
+                enabled: !root.test-running;
+                clicked => {
+                    root.run-test();
+                }
+            }
+        }
+    }
+
+    // -- About --
+    if root.about-open: Modal {
+        title: "About";
+
+        HorizontalLayout {
+            alignment: start;
+            spacing: 12px;
+
+            Image {
+                width: 48px;
+                height: 48px;
+                source: root.app-icon;
+            }
+
+            VerticalLayout {
+                alignment: center;
+                Text {
+                    text: "frugalRGB";
+                    font-size: 22px;
+                    font-weight: 700;
+                }
+
+                Text {
+                    text: root.version;
+                    font-size: 12px;
+                    color: Palette.foreground.transparentize(0.45);
+                }
+            }
+        }
+
+        Text {
+            wrap: word-wrap;
+            text: "A small standalone RGB controller for PC hardware. No bloat, just LEDs.";
+        }
+
+        Text {
+            wrap: word-wrap;
+            font-size: 11px;
+            color: Palette.foreground.transparentize(0.45);
+            text: "Free software under the GNU Affero General Public License, version 3 or later. Not affiliated with any hardware vendor.";
+        }
+
+        VerticalLayout {
+            spacing: 2px;
+
+            LinkRow {
+                mark: Marks.github;
+                label: "github.com/emaspa/frugalRGB";
+                clicked => {
+                    root.open-link(0);
+                }
+            }
+
+            LinkRow {
+                mark: Marks.coffee;
+                label: "Buy me a coffee";
+                clicked => {
+                    root.open-link(1);
+                }
+            }
+
+            LinkRow {
+                mark: Marks.kofi;
+                label: "Support me on Ko-fi";
+                clicked => {
+                    root.open-link(2);
+                }
+            }
+        }
+
+        HorizontalLayout {
+            alignment: end;
+            Button {
+                text: "Close";
+                clicked => {
+                    root.about-open = false;
+                }
+            }
+        }
+    }
+
+    // -- A message to acknowledge --
+    if root.notice != "": Modal {
+        title: "frugalRGB";
+
+        Text {
+            wrap: word-wrap;
+            text: root.notice;
+        }
+
+        HorizontalLayout {
+            alignment: end;
+            Button {
+                text: "OK";
+                primary: true;
+                clicked => {
+                    root.notice = "";
+                }
+            }
+        }
+    }
+}
+
+// Shown instead of the main window when there is nothing else to show,
+// such as a second copy being started.
+export component NoticeWindow inherits Window {
+    in property <string> message;
+    in property <image> app-icon;
+    callback dismissed();
+
+    title: "frugalRGB";
+    icon: root.app-icon;
+    width: 380px;
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 16px;
+
+        Text {
+            wrap: word-wrap;
+            text: root.message;
+        }
+
+        HorizontalLayout {
+            alignment: end;
+            Button {
+                text: "OK";
+                primary: true;
+                clicked => {
+                    root.dismissed();
+                }
+            }
+        }
+    }
+}
+
+// The tray icon. It has no window: its only UI is the menu.
+export component Tray inherits SystemTrayIcon {
+    in property <[string]> presets;
+    in property <image> tray-icon;
+    callback show-window();
+    callback load-preset(string);
+    callback leds-off();
+    callback quit();
+
+    icon: root.tray-icon;
+    tooltip: "frugalRGB";
+    title: "frugalRGB";
+
+    clicked => {
+        root.show-window();
+    }
+
+    Menu {
+        MenuItem {
+            title: "Show";
+            activated => {
+                root.show-window();
+            }
+        }
+
+        Menu {
+            title: "Load Preset";
+            for preset in root.presets: MenuItem {
+                title: preset;
+                activated => {
+                    root.load-preset(preset);
+                }
+            }
+        }
+
+        MenuItem {
+            title: "LEDs Off";
+            activated => {
+                root.leds-off();
+            }
+        }
+
+        MenuSeparator { }
+
+        MenuItem {
+            title: "Quit";
+            activated => {
+                root.quit();
+            }
+        }
+    }
+}

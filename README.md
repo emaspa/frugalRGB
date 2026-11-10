@@ -1,82 +1,65 @@
-# frugalRGB — no bloat, just LEDs
+# frugalRGB: no bloat, just LEDs
 
-A lightweight, standalone RGB controller for PC hardware. Built for personal use as a replacement for [SignalRGB](https://signalrgb.com/) (too bloated) and [OpenRGB](https://openrgb.org/) (conflicts with Stream Deck, buggy on some hardware).
+A small standalone RGB controller for PC hardware. I built it for my own machines as a replacement for [SignalRGB](https://signalrgb.com/) (too bloated) and [OpenRGB](https://openrgb.org/) (conflicts with Stream Deck, buggy on some hardware).
 
-![frugalRGB screenshot](screenshot_v002.png)
+It is one native executable. Sitting in the tray it uses about 20 MB of RAM (measured on Linux with KDE; the Python version it replaces used 89 MB).
+
+![frugalRGB screenshot](screenshot.png)
 
 ## Supported devices
 
-This app was built for **my specific hardware**. It currently supports:
+This app was built for my specific hardware. It currently supports:
 
 | Device | Connection | Notes |
 |--------|-----------|-------|
-| **ASRock Polychrome USB** (VID `26CE`, PID `01A2`) | USB HID | Tested on ASRock Z890M Riptide. Does **not** require admin. |
-| **MSI Mystic Light** (VID `1462`, 185-byte protocol) | USB HID | Tested on MSI MPG Z790I EDGE WIFI (PID `7E03`). Does **not** require admin. |
-| **Gigabyte RGB Fusion 2.0** (VID `048D`, ITE IT5711/IT8297) | USB HID | Tested on Gigabyte X870E Aorus Master X3D. Does **not** require admin. |
-| **ASUS Aura USB** (VID `0B05`) | USB HID | Mainboard protocol — onboard RGB + addressable headers, auto-detected from the device config table (PIDs `19AF`/`1939`/`18F3`). Does **not** require admin. |
-| **Creative Sound BlasterX Katana** (VID `041E`, PID `3247`) | USB HID | Soundbar with 49-LED Aurora lighting. Static (solo + per-zone mood), breathing, color cycle, rainbow wave, all as hardware effects. Edits the currently active device profile (changes persist on the device, like the official app). Does **not** require admin. |
-| **ASUS GPU RGB** (ENE controller at I2C `0x67`) | NvAPI I2C (Windows) / i2c-dev (Linux) | Tested on ASUS TUF RTX 5090. Does **not** require admin (Linux: `i2c` group). NVIDIA GPU only. |
-| **ENE AUDA-series DDR5 DRAM RGB** (addresses `0x70`–`0x77`) | SMBus (i801/PIIX4) | Tested with KLEVV DDR5 RGB. **Requires admin on Windows** (kernel-level SMBus access); on Linux the `i2c` group is enough. Supports Intel (i801) and AMD (PIIX4) chipsets. |
+| ASRock Polychrome USB (VID `26CE`, PID `01A2`) | USB HID | Tested on ASRock Z890M Riptide. No admin needed. |
+| MSI Mystic Light (VID `1462`, 185-byte protocol) | USB HID | Tested on MSI MPG Z790I EDGE WIFI (PID `7E03`), the one board whose zones frugalRGB knows. Other Mystic Light boards get a single "All Zones" control. No admin needed. |
+| Gigabyte RGB Fusion 2.0 (VID `048D`, ITE IT5711/IT5702/IT8297/IT8950) | USB HID | Tested on Gigabyte X870E Aorus Master X3D. No admin needed. |
+| ASUS Aura USB (VID `0B05`) | USB HID | Mainboard protocol. Onboard RGB and addressable headers are read from the device's config table. PID `19AF` is supported, `1939` and `18F3` are experimental. No admin needed. |
+| Creative Sound BlasterX Katana (VID `041E`, PID `3247`) | USB HID | Soundbar with 49 LEDs. Static (one color or one per zone), breathing, color cycle and rainbow wave, all run by the soundbar itself. Edits the active device profile, so changes persist on the device like with the official app. No admin needed. |
+| ASUS GPU RGB (ENE controller at I2C `0x67`) | NvAPI I2C (Windows), i2c-dev (Linux) | Tested on ASUS TUF RTX 5090. Any ASUS-built NVIDIA card with that controller is picked up. No admin needed (Linux: `i2c` group). |
+| ENE AUDA-series DDR5 RAM (addresses `0x70` to `0x77`) | SMBus (i801/PIIX4) | Tested with KLEVV DDR5 RGB. Needs admin on Windows (kernel-level SMBus access). On Linux the `i2c` group is enough. Intel (i801) and AMD (PIIX4) chipsets. |
+| ENE DDR4 RAM (same addresses, older protocol) | SMBus (i801/PIIX4) | One color per stick. The driver has been in the code since the first release, but I have no report of it on real sticks. Same access rules as DDR5. |
+
+### About 0.5.0
+
+Version 0.5.0 is a rewrite in Rust. Every driver was ported from the Python one and has to reproduce, byte for byte, what the Python driver sent to a simulated device. On real hardware I have so far only re-tested the Gigabyte board and the Katana, on Linux. If your device behaves differently than it did with 0.3.0, please [open an issue](../../issues) with the diagnostics file. 0.3.0 stays on the [Releases](../../releases) page.
+
+Presets and settings carry over. One behavior changed on purpose. An unchecked zone is now switched off. Before, it was skipped and kept whatever it was showing.
 
 ### What about my hardware?
 
-There is a **Diagnostics** button in the app that collects device info, register dumps, and system details into a zip file on your Desktop. Run as admin to include SMBus/RAM data. If you'd like support for your hardware, you can [open an issue](../../issues) and attach that zip. I'll do my best to look into it, but there's no commitment to extend support — this is a personal project.
+The Diagnostics button writes `frugalrgb_diagnostics.txt` to your Desktop: system details, every USB HID device, an SMBus scan, register dumps of the detected controllers, your config and presets, and the app's log. On Windows, run as administrator so it can include the RAM. `frugalrgb diagnostics` prints the same report in a terminal.
+
+If you'd like support for your hardware, [open an issue](../../issues) and attach that file. I'll look into it when I can, but this is a personal project and I can't promise anything.
 
 ## Features
 
-- **Static color** — pick any color via the color picker, preset buttons, or manual RGB entry
-- **Effects** — breathing, color cycle, rainbow, strobe — all with adjustable speed
-- **Per-zone color** — every RGB zone (Logo, Accent, D_LED1, LED 1–8, etc.) is its own card with independent color and on/off control
-- **Per-device calibration** — RGB brightness correction sliders per device to compensate for LED imbalance
-- **Presets** — save/load/overwrite/delete named presets; saves per-zone color, enabled state, effect, and speed
-- **Startup preset** — automatically apply a preset on launch
-- **System tray** — minimize to tray, close to tray, load presets from tray menu
-- **Start minimized** — launch hidden in the tray
-- **Start at login** — when running as Administrator, creates a Windows scheduled task that launches the app at login with elevated privileges and no UAC prompt; when running without admin, creates a standard startup shortcut (note: Windows Defender may also flag the scheduled task creation — see [Windows Defender](#pre-built-exe-windows) note above); on Linux, creates an XDG autostart entry in `~/.config/autostart/`
-- **`--apply-quit` mode** — apply the startup preset and exit immediately (saves RAM for always-on setups)
-- **Save to Hardware** — write the current color/mode to the DRAM controller's non-volatile flash so it persists across power cycles (boot color). See [warning below](#save-to-hardware-warning)
-- **Diagnostics** — collect system info, USB HID enumeration, SMBus scan, device register dumps, and config files into a zip for troubleshooting (run as admin to include SMBus/RAM data)
-- **Aura Test** — for ASUS Aura boards, shows the detected controller's firmware and zone layout and cycles the LEDs through red/green/blue/white to confirm lighting is working
-- **Cross-platform** — runs on Windows (PawnIO driver) and Linux (hidapi + smbus2). Packages are available for [Arch (AUR)](#arch-linux-aur) and [Ubuntu/Debian (.deb)](#ubuntu--debian-deb), or install [from source](#linux-from-source). Linux hardware support is only tested on CachyOS (Arch-based); other distributions should work but are untested.
-- **Single instance** — prevents duplicate instances with a friendly notification
+- Static color from the HSV sliders, the color buttons, or a typed `#RRGGBB` or `R,G,B` value.
+- Breathing, color cycle, rainbow and strobe with adjustable speed. Devices that have the effect built in run it themselves. The others get frames from frugalRGB at 30 fps.
+- **Per-zone color.** Every RGB zone (Logo, Accent, D_LED1, LED 1 to 8, etc.) is its own row with its own color and checkbox. An unchecked zone is switched off, even when "All Zones" is checked. Uncheck every zone of a device and frugalRGB leaves that device alone.
+- Per-device calibration with three sliders that scale red, green and blue, for LEDs whose white is off.
+- Presets store each zone's color and checkbox, the effect and the speed. The "On start" preset is applied when frugalRGB starts.
+- Tray icon. A click brings the window up, and its menu loads a preset, switches the LEDs off or quits. The window can close to the tray and start hidden in it.
+- "Off on close" switches the LEDs off when frugalRGB quits.
+- **Start at login.** On Linux this writes an XDG autostart entry to `~/.config/autostart/`. On Windows it puts a shortcut in the Startup folder. When frugalRGB runs as administrator, the shortcut starts a scheduled task that brings the app up elevated at login without a UAC prompt, which RAM RGB needs. Windows Defender may flag the creation of that task.
+- **Save to Hardware** writes the current color and mode to the device's flash, so it is there at power-on. Read the [warning](#save-to-hardware-warning) first.
+- **Device Test** lights one device in red, green, blue and white, then puts your colors back. It shows whether the device answers at all and whether its color channels are in the right order.
+- Command line for scripts: see [below](#command-line).
+- Only one instance runs at a time. Starting frugalRGB again brings up the window of the one already running (on Windows it tells you to look in the tray).
 
 ## Installation
 
-### Pre-built exe (Windows)
+### Windows
 
-Download `frugalRGB.zip` from the [Releases](../../releases) page, extract it, and run `frugalRGB.exe`.
+Download `frugalRGB-<version>-windows-x64.zip` from the [Releases](../../releases) page, extract it and run `frugalRGB.exe`.
 
-- For **motherboard/USB RGB** (ASRock, MSI, Gigabyte, ASUS controllers): no admin required.
-- For **RAM RGB** (DDR5 via SMBus): run as Administrator.
+- Motherboard and other USB RGB (ASRock, MSI, Gigabyte, ASUS, Katana) and ASUS GPU RGB work without admin.
+- RAM RGB needs [PawnIO](https://pawnio.eu/) installed and frugalRGB started with "Run as administrator". The SMBus modules PawnIO loads are built into the exe.
 
-> **Windows Defender:** Because this is an unsigned PyInstaller executable, Windows Defender may flag it as a threat. You'll need to allow it manually (Windows Security > Virus & threat protection > Protection history > Allow on device). This is a common false positive with PyInstaller-packaged apps.
+The exe is not signed, so SmartScreen may warn the first time you run it ("More info", then "Run anyway").
 
-### Prerequisites for RAM RGB (SMBus)
-
-On Windows, DDR5 DRAM RGB control requires kernel-level port I/O access through [PawnIO](https://pawnio.eu/):
-
-1. Install PawnIO from https://pawnio.eu/
-2. Download `SmbusI801.bin` from [PawnIO.Modules releases](https://github.com/namazso/PawnIO.Modules/releases)
-3. Place `SmbusI801.bin` in the `modules/` folder next to the app (or next to the exe's `_internal/modules/`)
-4. Run as Administrator
-
-### From source
-
-```bash
-git clone https://github.com/emaspa/frugalRGB.git
-cd frugalRGB
-pip install -r requirements.txt
-```
-
-Run:
-```bash
-# For motherboard RGB only (no admin needed):
-pythonw main.pyw
-
-# For RAM RGB (needs admin):
-# Run your terminal as Administrator, then:
-pythonw main.pyw
-```
+Close other RGB software first (Armoury Crate, RGB Fusion, Mystic Light, SignalRGB). Two programs driving the same controller overwrite each other.
 
 ### Arch Linux (AUR)
 
@@ -86,7 +69,7 @@ pythonw main.pyw
 yay -S frugalrgb
 ```
 
-This installs the app (`frugalrgb` command + application menu entry), the udev rules for USB RGB access, and autoload config for the SMBus kernel modules (`i2c-dev`, `i2c-piix4`, `i2c-i801`).
+This installs the `frugalrgb` command, an application menu entry, the udev rules for USB RGB access, and autoload config for the SMBus kernel modules (`i2c-dev`, `i2c-piix4`, `i2c-i801`).
 
 **2. Activate device access** (first install only; a reboot does the same):
 
@@ -95,9 +78,9 @@ sudo udevadm trigger                        # apply the udev rules without replu
 sudo modprobe i2c-dev i2c-piix4 i2c-i801    # load the SMBus modules without rebooting
 ```
 
-Loading the wrong chipset's module is harmless; it simply won't bind.
+Loading the wrong chipset's module is harmless. It won't bind.
 
-**3. Join the `i2c` group** (needed for DRAM RGB and GPU RGB):
+**3. Join the `i2c` group** (needed for RAM RGB and GPU RGB):
 
 ```bash
 sudo usermod -aG i2c $USER
@@ -105,21 +88,15 @@ sudo usermod -aG i2c $USER
 
 Then log out and back in for the group to take effect.
 
-**4. Gigabyte boards only, for DRAM RGB:** the BIOS claims the SMBus region and the kernel refuses to bind the driver (`dmesg` shows `ACPI Warning: SystemIO range ... conflicts with OpRegion`). Add the kernel parameter `acpi_enforce_resources=lax` and reboot:
+**4. Gigabyte boards only, for RAM RGB:** the BIOS claims the SMBus region and the kernel refuses to bind the driver (`dmesg` shows `ACPI Warning: SystemIO range ... conflicts with OpRegion`). Add the kernel parameter `acpi_enforce_resources=lax` and reboot:
 
-- **GRUB**: append it to `GRUB_CMDLINE_LINUX_DEFAULT` in `/etc/default/grub`, then `sudo grub-mkconfig -o /boot/grub/grub.cfg`
-- **systemd-boot**: append it to the `options` line of your entry in `/boot/loader/entries/`
-- **Limine (CachyOS)**: add `KERNEL_CMDLINE[default]+=" acpi_enforce_resources=lax"` to `/etc/default/limine`, then `sudo limine-update`
+- GRUB: append it to `GRUB_CMDLINE_LINUX_DEFAULT` in `/etc/default/grub`, then `sudo grub-mkconfig -o /boot/grub/grub.cfg`
+- systemd-boot: append it to the `options` line of your entry in `/boot/loader/entries/`
+- Limine (CachyOS): add `KERNEL_CMDLINE[default]+=" acpi_enforce_resources=lax"` to `/etc/default/limine`, then `sudo limine-update`
 
-This is the same access pattern RGB tools rely on under Windows, where no such check exists; OpenRGB documents the same parameter. Skip this step if you don't need DRAM RGB.
+RGB tools use the same access pattern under Windows, where no such check exists. OpenRGB documents the same parameter. Skip this step if you don't need RAM RGB.
 
-**5. Optional, transparent tray icon:** the tray needs pystray's appindicator backend, or the icon falls back to an opaque tile:
-
-```bash
-sudo pacman -S python-gobject libayatana-appindicator
-```
-
-**6. Run** `frugalrgb` from a terminal, or launch **frugalRGB** from the application menu.
+**5. Run** `frugalrgb` from a terminal, or launch frugalRGB from the application menu.
 
 ### Ubuntu / Debian (.deb)
 
@@ -129,55 +106,57 @@ sudo pacman -S python-gobject libayatana-appindicator
 sudo apt install ./frugalrgb_*.deb
 ```
 
-This installs the app (`frugalrgb` command + application menu entry), the udev rules for USB RGB access, and autoload config for the SMBus kernel modules — and, via Recommends, `i2c-tools` (which provides the `i2c` group and device permissions) and the appindicator libraries for a proper transparent tray icon. The post-install script reloads udev and loads the SMBus modules, so no reboot is needed.
+This installs the `frugalrgb` command, an application menu entry, the udev rules for USB RGB access, autoload config for the SMBus kernel modules and, via Recommends, `i2c-tools` (which provides the `i2c` group and device permissions). The post-install script reloads udev and loads the SMBus modules, so no reboot is needed. The package is built on Ubuntu 22.04 and needs that or newer.
 
-**2. Join the `i2c` group** (needed for DRAM RGB and GPU RGB):
+**2. Join the `i2c` group** (needed for RAM RGB and GPU RGB):
 
 ```bash
 sudo usermod -aG i2c $USER
 ```
 
-Then log out and back in for the group to take effect. If the group doesn't exist, `i2c-tools` was skipped — `sudo apt install i2c-tools` first.
+Then log out and back in for the group to take effect. If the group doesn't exist, `i2c-tools` was skipped. Run `sudo apt install i2c-tools` first.
 
-**3. Gigabyte boards only, for DRAM RGB:** add the kernel parameter `acpi_enforce_resources=lax` (see step 4 of the AUR section for why): append it to `GRUB_CMDLINE_LINUX_DEFAULT` in `/etc/default/grub`, then `sudo update-grub` and reboot.
+**3. Gigabyte boards only, for RAM RGB:** add the kernel parameter `acpi_enforce_resources=lax` (step 4 of the AUR section says why). Append it to `GRUB_CMDLINE_LINUX_DEFAULT` in `/etc/default/grub`, then `sudo update-grub` and reboot.
 
-**4. Run** `frugalrgb` from a terminal, or launch **frugalRGB** from the application menu.
+**4. Run** `frugalrgb` from a terminal, or launch frugalRGB from the application menu.
 
-To build the package yourself instead of downloading it:
+To build the package yourself:
 
 ```bash
-sudo apt install python3-pil python3-pip
-bash packaging/build_deb.sh    # output: dist/frugalrgb_<version>_all.deb
+sudo apt install pkg-config libudev-dev libfontconfig1-dev    # plus Rust, see below
+bash packaging/build_deb.sh    # output: dist/frugalrgb_<version>_<arch>.deb
 ```
 
-The deb depends on distro packages for everything Debian ships (`python3-hid` is the same cython-hidapi library as the PyPI `hidapi` wheel, built against hidraw) and vendors the pure-Python deps Debian doesn't package (customtkinter, CTkColorPicker, darkdetect) into `/usr/lib/frugalrgb/vendor`. Note the app needs Python ≥ 3.10, i.e. Ubuntu 22.04 or newer.
+### From source
 
-### Linux (from source)
-
-Linux support is only tested on CachyOS (Arch-based), with the Gigabyte X870E Aorus Master X3D, the KLEVV DDR5 kit, and the TUF RTX 5090 above. Other distributions should work but are untested; the package names below are for Arch with Debian/Ubuntu equivalents in comments. Python ≥ 3.10 is required (Ubuntu 22.04 or newer).
-
-Install dependencies. The GUI needs Tk, and most distros block `pip install` into the system Python, so use a venv:
+You need Rust 1.92 or newer ([rustup](https://rustup.rs/)). On Linux, also the headers for udev and fontconfig:
 
 ```bash
-sudo pacman -S tk    # Debian/Ubuntu: sudo apt install python3-tk python3-venv
+sudo pacman -S fontconfig systemd-libs                        # Arch
+sudo apt install pkg-config libudev-dev libfontconfig1-dev    # Debian/Ubuntu
+```
 
+On Windows, the MSVC toolchain with the Visual Studio C++ build tools.
+
+```bash
 git clone https://github.com/emaspa/frugalRGB.git
 cd frugalRGB
-python -m venv .venv
-.venv/bin/pip install -r requirements.txt
+cargo build --release -p frugalrgb    # output: target/release/frugalrgb
 ```
 
-**USB RGB** (motherboard controllers): no root needed. Install the udev rules so the app can open the devices as a normal user, then replug or retrigger:
+`cargo build --release -p frugalrgb --no-default-features` builds the command line alone, without the window and tray.
+
+On Linux, a build run from the source tree still needs device access. For USB RGB, install the udev rules, then replug or retrigger:
 
 ```bash
 sudo cp 70-frugalrgb.rules /etc/udev/rules.d/
 sudo udevadm control --reload && sudo udevadm trigger
 ```
 
-**RAM RGB** (DDR5 via SMBus): also no root needed on Linux. Join the `i2c` group and load `i2c-dev` plus the chipset SMBus driver:
+For RAM and GPU RGB, join the `i2c` group and load `i2c-dev` plus the chipset SMBus driver:
 
 ```bash
-# Debian/Ubuntu only: stock installs have no i2c group — i2c-tools creates it
+# Debian/Ubuntu only: stock installs have no i2c group. i2c-tools creates it
 # and installs the udev rule that makes /dev/i2c-* group-accessible:
 sudo apt install i2c-tools
 
@@ -188,93 +167,88 @@ printf 'i2c-dev\ni2c-piix4\n' | sudo tee /etc/modules-load.d/frugalrgb.conf
 sudo modprobe i2c-dev i2c-piix4
 ```
 
-On many boards (Gigabyte in particular) the BIOS claims the SMBus region for itself and the kernel then refuses to bind the driver: `dmesg` shows `ACPI Warning: SystemIO range ... conflicts with OpRegion`. Boot with the kernel parameter `acpi_enforce_resources=lax` to allow it (on Debian/Ubuntu: append it to `GRUB_CMDLINE_LINUX_DEFAULT` in `/etc/default/grub`, then `sudo update-grub` and reboot). This is the same access pattern RGB tools rely on under Windows, where no such check exists; OpenRGB documents the same parameter for DRAM RGB.
+Gigabyte boards also need `acpi_enforce_resources=lax` for RAM RGB, as described in step 4 of the AUR section.
 
-**System tray icon**: for a proper transparent tray icon, pystray needs its appindicator backend (the native StatusNotifier protocol on KDE and GNOME). Install PyGObject and the Ayatana appindicator library, and let the venv see system packages:
+Linux support is only tested on CachyOS (Arch-based). Other distributions should work but are untested. The tray icon uses the StatusNotifierItem protocol, which KDE supports natively and GNOME supports through the AppIndicator extension.
 
-```bash
-sudo pacman -S python-gobject libayatana-appindicator    # Debian/Ubuntu: python3-gi gir1.2-ayatanaappindicator3-0.1
-python -m venv --system-site-packages .venv    # or set include-system-site-packages = true in .venv/pyvenv.cfg
+`packaging/build_windows.ps1` builds the Windows zip.
+
+## Command line
+
+Without arguments `frugalrgb` opens the window. With a command it does one thing and exits:
+
+```
+frugalrgb list             Show detected devices and their zones
+frugalrgb presets          Show saved presets
+frugalrgb apply [PRESET]   Apply a preset (default: the startup preset)
+frugalrgb off              Switch every LED off
+frugalrgb test             Show red, green, blue and white on every device
+frugalrgb diagnostics      Print a report on the hardware for a bug report
 ```
 
-Without these, pystray falls back to its legacy X11 backend. The app still works and flattens the tray icon onto a dark tile (KDE's xembed proxy would otherwise render transparency as a green square), but the icon loses transparency.
+Add `-v` to see what is being detected and written.
 
-Run with:
-
-```bash
-.venv/bin/python main.pyw
-```
-
-Note: the PyPI `hidapi` wheel uses its libusb backend, which detaches the `usbhid` kernel driver from the RGB controller's interface while the app has it open. That is harmless for a dedicated RGB device.
-
-### Build the exe yourself
-
-```bash
-pip install pyinstaller
-python build.py
-```
-
-Output: `dist/frugalRGB/frugalRGB.exe`
+`frugalrgb apply` is the "set and forget" setup. Run it at login and nothing stays in memory. It only keeps running when the preset uses an effect that a device cannot run by itself, because then frugalRGB has to send the frames. `--apply-quit`, the flag older versions used for this, still works.
 
 ## Configuration
 
-Config files are stored in your home directory:
+Config files are stored in your home directory (`%USERPROFILE%` on Windows):
 
-- `~/.frugalrgb_config.json` — calibration, UI options, startup preset
-- `~/.frugalrgb_presets.json` — saved presets
-
-### `--apply-quit` flag
-
-For a "set and forget" setup, create a shortcut to:
-```
-frugalRGB.exe --apply-quit
-```
-This applies the configured startup preset and exits immediately — no window, no tray, minimal resource usage.
+- `~/.frugalrgb_config.json`: calibration, options, startup preset, window size
+- `~/.frugalrgb_presets.json`: saved presets
 
 ### Save to Hardware warning
 
-The **Save to Hardware** button writes the current color and mode to the device's non-volatile flash memory, so it persists across power cycles — before Windows even loads. Supported on ENE DRAM, Gigabyte RGB Fusion 2.0, and ASUS Aura mainboard controllers.
+The Save to Hardware button writes the current color and mode to the device's non-volatile flash memory, so it persists across power cycles and shows before the operating system loads. It is offered for ENE DDR5 RAM and GPU controllers, Gigabyte RGB Fusion 2.0, MSI Mystic Light and ASUS Aura mainboard controllers.
 
 > **Use at your own risk.** This operation is known to be unstable on some ENE firmware versions. In rare cases it can soft-lock the RGB controller, making the LEDs unresponsive. Recovery typically requires physically reseating the DIMM. OpenRGB disables this feature by default for the same reason.
 >
-> The app requires a **double confirmation** before saving. Make sure you have already clicked **Apply** with the desired color/mode before saving.
+> The app asks for confirmation twice before saving. Click Apply with the color and mode you want before you save.
 >
-> If you just want your color applied at every boot without touching hardware flash, use the **startup preset** + **Start at login** approach instead — that's the safer option.
+> If you only want your color applied at every boot without touching hardware flash, use a startup preset with Start at login. That is the safer option.
 
 ## Architecture
 
 ```
-main.pyw                      Entry point
-frugalrgb/
-  controllers/
-    base.py                   Abstract controller interface
-    detect.py                 Device auto-detection
-    asrock_polychrome.py      ASRock Polychrome USB HID protocol
-    msi_mystic_light.py       MSI Mystic Light USB HID protocol
-    gigabyte_rgb_fusion2.py   Gigabyte RGB Fusion 2.0 USB HID protocol
-    asus_aura_usb.py          ASUS Aura USB HID protocol
-    asus_gpu.py               ASUS GPU RGB via ENE I2C controller
-    ene_dram_ddr5.py          ENE AUDA DDR5 DRAM SMBus protocol
-  smbus/
-    interface.py              Platform-agnostic SMBus ABC
-    windows.py                PawnIO-backed i801/PIIX4 SMBus (Windows)
-    nvapi.py                  NvAPI I2C for GPU-connected controllers
-    linux.py                  /dev/i2c-* via smbus2 (Linux)
-  effects/
-    engine.py                 Threaded effect loop (hw or sw)
-  gui/
-    app.py                    CustomTkinter main window + tray
-    widgets.py                Device cards, presets, calibration
-  diagnostics.py              Diagnostics zip collector
-build.py                      PyInstaller build script (Windows exe)
-packaging/
-  build_deb.sh                Debian/Ubuntu package build script
-aur/
-  PKGBUILD                    Arch Linux package (AUR)
-modules/
-  SmbusI801.bin               PawnIO kernel module (not included — download separately)
+crates/
+  frugalrgb-core/             Library: everything except the user interface
+    src/controllers/          One module per device family
+      asrock.rs               ASRock Polychrome USB
+      aura.rs                 ASUS Aura USB
+      ene.rs                  ENE chips on SMBus: DDR5, DDR4, ASUS GPU
+      gigabyte.rs             Gigabyte RGB Fusion 2.0
+      katana.rs               Creative Sound BlasterX Katana
+      msi.rs                  MSI Mystic Light
+    src/transport.rs          The HID and SMBus traits the controllers talk to
+    src/hid.rs                HID through hidapi
+    src/smbus_linux.rs        SMBus through /dev/i2c-*
+    src/smbus_windows.rs      SMBus through PawnIO (i801/PIIX4)
+    src/nvapi.rs              GPU I2C through NvAPI (Windows)
+    src/detect.rs             Device detection
+    src/engine.rs             Zone resolver, apply, software effects
+    src/worker.rs             The thread that owns the devices
+    src/store.rs              Presets and settings on disk
+    src/diagnostics.rs        The diagnostics report
+    tests/                    Engine and store tests, driver transcripts
+  frugalrgb/                  The executable
+    src/main.rs, cli.rs       Command line
+    src/gui.rs, ui/app.slint  The window (Slint, software renderer)
+    src/tray.rs               Tray icon and its menu
+    src/autostart.rs          Start at login
+    src/logging.rs            Log to the terminal, kept for the diagnostics report
+tools/
+  gen_golden.py               Records the transcripts the driver tests replay
+  reference/                  The Python drivers of 0.3.0, kept as the reference
+packaging/                    deb and Windows zip build scripts, icon
+aur/PKGBUILD                  Arch Linux package (AUR)
+modules/                      PawnIO SMBus modules, built into the Windows exe
+70-frugalrgb.rules            udev rules for USB device access
 ```
+
+The driver tests work without hardware. `tools/gen_golden.py` drives each Python reference driver against a simulated device and records every byte in both directions. `cargo test` replays the same replies to the Rust driver and fails on the first byte that differs.
 
 ## License
 
-[MIT License](LICENSE)
+[GNU Affero General Public License v3.0 or later](LICENSE). Versions up to 0.3.0 were released under the MIT License.
+
+The files in `modules/` come from [PawnIO.Modules](https://github.com/namazso/PawnIO.Modules) and are licensed LGPL-2.1. To use different builds of them, put `SmbusI801.bin` or `SmbusPIIX4.bin` in a `modules` folder next to `frugalRGB.exe`.

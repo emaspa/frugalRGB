@@ -1,0 +1,17 @@
+[workspace]
+resolver = "2"
+members = ["crates/frugalrgb-core", "crates/frugalrgb"]
+
+[workspace.package]
+version = "0.5.0"
+rust-version = "1.92"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/emaspa/frugalRGB"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
