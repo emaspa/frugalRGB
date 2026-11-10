@@ -1,0 +1,31 @@
+[package]
+name = "frugalrgb"
+description = "Lightweight standalone RGB controller for PC hardware (no bloat, just LEDs)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = ["gui"]
+# The window and tray icon. Without it the binary is the command line only.
+gui = ["dep:slint", "dep:slint-build"]
+
+[dependencies]
+frugalrgb-core = { path = "../frugalrgb-core" }
+log = { version = "0.4", features = ["std"] }
+# Software renderer only: an OpenGL context costs more memory than the
+# whole rest of the program (164 MB against 21 MB, measured)
+slint = { version = "1.18", optional = true, default-features = false, features = [
+    "std",
+    "compat-1-2",
+    "backend-winit",
+    "renderer-software",
+    "system-tray",
+] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[build-dependencies]
+slint-build = { version = "1.18", optional = true }

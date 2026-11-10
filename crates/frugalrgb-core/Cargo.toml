@@ -1,0 +1,25 @@
+[package]
+name = "frugalrgb-core"
+description = "Device protocols and effect engine for frugalRGB"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+log = "0.4"
+indexmap = { version = "2", features = ["serde"] }
+
+# hidraw through the system's libudev. The crate's own udev replacement
+# (linux-native-basic-udev) needs 50 MB to list devices; this needs 1 MB.
+[target.'cfg(target_os = "linux")'.dependencies]
+hidapi = { version = "2.6", default-features = false, features = ["linux-native"] }
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+hidapi = { version = "2.6", default-features = false, features = ["windows-native"] }
+
+[target.'cfg(not(any(target_os = "linux", windows)))'.dependencies]
+hidapi = "2.6"

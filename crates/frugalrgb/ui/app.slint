@@ -1,0 +1,774 @@
+import { Button, CheckBox, ComboBox, LineEdit, Palette, ScrollView, Slider } from "std-widgets.slint";
+
+// One zone of a device, as a row in the zone list.
+export struct ZoneCard {
+    device: string,
+    zone: string,
+    // First zone of its device: the device name is shown above it.
+    header: bool,
+    enabled: bool,
+    color: color,
+}
+
+// A checkbox with no state of its own: it shows what the model says, so a
+// preset loaded from code can never disagree with what is on screen.
+component Check inherits Rectangle {
+    in property <bool> checked;
+    callback toggled(bool);
+
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border-width: 1.5px;
+    border-color: root.checked ? Palette.accent-background : #7a8090;
+    background: touch.has-hover ? #ffffff18 : transparent;
+
+    Rectangle {
+        width: 10px;
+        height: 10px;
+        border-radius: 2px;
+        background: root.checked ? Palette.accent-background : transparent;
+    }
+
+    touch := TouchArea {
+        clicked => {
+            root.toggled(!root.checked);
+        }
+    }
+}
+
+component ZoneRow inherits Rectangle {
+    in property <ZoneCard> card;
+    callback toggled(bool);
+    callback painted();
+
+    height: 30px;
+    border-radius: 6px;
+    background: #ffffff0a;
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 10px;
+
+        VerticalLayout {
+            alignment: center;
+            Check {
+                checked: root.card.enabled;
+                toggled(on) => {
+                    root.toggled(on);
+                }
+            }
+        }
+
+        Text {
+            text: root.card.zone;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+            color: root.card.enabled ? Palette.foreground : Palette.foreground.transparentize(0.55);
+        }
+
+        VerticalLayout {
+            alignment: center;
+            // The zone's colour. Clicking it paints the zone with the brush.
+            Rectangle {
+                width: 46px;
+                height: 18px;
+                border-radius: 4px;
+                border-width: 1px;
+                border-color: swatch-touch.has-hover ? #ffffff : #ffffff40;
+                background: root.card.color;
+                opacity: root.card.enabled ? 1 : 0.3;
+
+                swatch-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.painted();
+                    }
+                }
+            }
+        }
+    }
+}
+
+component Heading inherits Text {
+    font-size: 11px;
+    font-weight: 700;
+    color: Palette.foreground.transparentize(0.45);
+}
+
+component ColorButton inherits Rectangle {
+    in property <color> shade;
+    in property <string> label;
+    callback picked(color);
+
+    height: 26px;
+    horizontal-stretch: 1;
+    border-radius: 5px;
+    border-width: 1px;
+    border-color: touch.has-hover ? #ffffff : #ffffff30;
+    background: root.shade;
+
+    Text {
+        text: root.label;
+        font-size: 11px;
+        // Dark text on the bright shades
+        color: root.shade.to-hsv().value > 0.8 && (root.shade.to-hsv().saturation < 0.5 || root.shade.green > 180) ? #101010 : #ffffff;
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.picked(root.shade);
+        }
+    }
+}
+
+component LabelledSlider inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> readout;
+    in property <float> minimum: 0;
+    in property <float> maximum: 1;
+    in-out property <float> value;
+    callback changed();
+    callback released();
+
+    spacing: 8px;
+
+    Text {
+        text: root.label;
+        width: 14px;
+        vertical-alignment: center;
+    }
+
+    Slider {
+        minimum: root.minimum;
+        maximum: root.maximum;
+        value <=> root.value;
+        changed => {
+            root.changed();
+        }
+        released => {
+            root.released();
+        }
+    }
+
+    Text {
+        text: root.readout;
+        width: 40px;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+        color: Palette.foreground.transparentize(0.3);
+    }
+}
+
+export component MainWindow inherits Window {
+    title: "frugalRGB - no bloat, just LEDs";
+    icon: root.app-icon;
+    preferred-width: 860px;
+    preferred-height: 680px;
+    min-width: 720px;
+    min-height: 560px;
+
+    in property <image> app-icon;
+    in property <string> version;
+    in property <string> status;
+    // Shown instead of the zone list when no device was found.
+    in property <string> no-devices-hint;
+
+    in property <[ZoneCard]> cards;
+    callback card-toggled(int, bool);
+    callback card-painted(int);
+
+    // The brush: the colour that the checked zones are painted with.
+    in-out property <float> hue;
+    in-out property <float> saturation;
+    in-out property <float> brightness: 1;
+    out property <color> brush: hsv(root.hue, root.saturation, root.brightness);
+    in property <string> brush-text;
+    // The user changed the brush (as opposed to a preset setting it).
+    callback brush-picked();
+    callback hex-entered(string);
+
+    public function set-brush(shade: color) {
+        // Black and greys have no hue of their own: keep the slider put
+        if (shade.to-hsv().saturation > 0 && shade.to-hsv().value > 0) {
+            root.hue = shade.to-hsv().hue;
+        }
+        root.saturation = shade.to-hsv().saturation;
+        root.brightness = shade.to-hsv().value;
+    }
+
+    in property <[string]> effects;
+    in-out property <int> effect-index;
+    in-out property <float> speed: 1.0;
+    callback effect-changed();
+
+    in property <[string]> devices;
+    in-out property <int> calibration-device;
+    in-out property <float> cal-r: 1;
+    in-out property <float> cal-g: 1;
+    in-out property <float> cal-b: 1;
+    callback calibration-device-changed();
+    callback calibration-changed();
+    callback calibration-released();
+
+    in property <[string]> presets;
+    in-out property <int> preset-index;
+    in-out property <int> startup-index;
+    in-out property <string> preset-name;
+    callback preset-selected(string);
+    callback save-preset(string);
+    callback delete-preset();
+    callback startup-preset-changed(string);
+
+    in-out property <bool> off-on-close;
+    in-out property <bool> close-to-tray;
+    in-out property <bool> start-minimized;
+    in-out property <bool> start-at-login;
+    in property <bool> tray-available;
+    in property <bool> autostart-supported;
+    callback options-changed();
+    callback start-at-login-toggled(bool);
+
+    in property <bool> can-save-hardware;
+    in property <string> save-targets;
+    callback apply();
+    callback leds-off();
+    callback save-to-hardware();
+
+    // 0 = hidden, 1 = explain the risk, 2 = last confirmation
+    property <int> confirm-step;
+
+    VerticalLayout {
+        padding: 14px;
+        spacing: 12px;
+
+        HorizontalLayout {
+            spacing: 10px;
+            Text {
+                text: "frugalRGB";
+                font-size: 22px;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+
+            Text {
+                text: "no bloat, just LEDs";
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+                color: Palette.foreground.transparentize(0.45);
+            }
+
+            Text {
+                text: root.version;
+                vertical-alignment: center;
+                color: Palette.foreground.transparentize(0.45);
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 14px;
+            vertical-stretch: 1;
+
+            // -- Zones --
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 6px;
+
+                Heading {
+                    text: "ZONES";
+                }
+
+                if root.cards.length == 0: Text {
+                    text: root.no-devices-hint;
+                    wrap: word-wrap;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    vertical-stretch: 1;
+                    color: Palette.foreground.transparentize(0.45);
+                }
+
+                if root.cards.length > 0: ScrollView {
+                    vertical-stretch: 1;
+                    min-width: 300px;
+
+                    VerticalLayout {
+                        alignment: start;
+                        spacing: 4px;
+                        padding-right: 12px;
+
+                        for card[index] in root.cards: VerticalLayout {
+                            spacing: 4px;
+                            if card.header: Text {
+                                text: card.device;
+                                font-weight: 700;
+                                height: 26px;
+                                vertical-alignment: bottom;
+                                overflow: elide;
+                            }
+                            ZoneRow {
+                                card: card;
+                                toggled(on) => {
+                                    root.card-toggled(index, on);
+                                }
+                                painted => {
+                                    root.card-painted(index);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // -- Colour, effect, calibration --
+            VerticalLayout {
+                width: 370px;
+                alignment: start;
+                spacing: 8px;
+
+                Heading {
+                    text: "COLOR";
+                }
+
+                HorizontalLayout {
+                    spacing: 12px;
+
+                    Rectangle {
+                        width: 64px;
+                        border-radius: 8px;
+                        border-width: 1px;
+                        border-color: #ffffff40;
+                        background: root.brush;
+                    }
+
+                    VerticalLayout {
+                        spacing: 4px;
+                        LabelledSlider {
+                            label: "H";
+                            maximum: 360;
+                            readout: round(root.hue) + "°";
+                            value <=> root.hue;
+                            changed => {
+                                root.brush-picked();
+                            }
+                        }
+
+                        LabelledSlider {
+                            label: "S";
+                            readout: round(root.saturation * 100) + "%";
+                            value <=> root.saturation;
+                            changed => {
+                                root.brush-picked();
+                            }
+                        }
+
+                        LabelledSlider {
+                            label: "V";
+                            readout: round(root.brightness * 100) + "%";
+                            value <=> root.brightness;
+                            changed => {
+                                root.brush-picked();
+                            }
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    Text {
+                        text: root.brush-text;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                        color: Palette.foreground.transparentize(0.3);
+                    }
+
+                    hex := LineEdit {
+                        width: 150px;
+                        placeholder-text: "#RRGGBB or R,G,B";
+                        accepted(text) => {
+                            root.hex-entered(text);
+                            self.text = "";
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 4px;
+                    for shade in [
+                        { label: "Red", shade: #ff0000 },
+                        { label: "Green", shade: #00ff00 },
+                        { label: "Blue", shade: #0000ff },
+                        { label: "Cyan", shade: #00ffff },
+                        { label: "Purple", shade: #8000ff },
+                    ]: ColorButton {
+                        label: shade.label;
+                        shade: shade.shade;
+                        picked(c) => {
+                            root.set-brush(c);
+                            root.brush-picked();
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 4px;
+                    for shade in [
+                        { label: "Orange", shade: #ff8000 },
+                        { label: "White", shade: #ffffff },
+                        { label: "Warm", shade: #ffb060 },
+                        { label: "Black", shade: #000000 },
+                    ]: ColorButton {
+                        label: shade.label;
+                        shade: shade.shade;
+                        picked(c) => {
+                            root.set-brush(c);
+                            root.brush-picked();
+                        }
+                    }
+                }
+
+                Text {
+                    text: "The brush paints every checked zone. Click a zone's swatch to paint only that zone. Unchecked zones are switched off.";
+                    wrap: word-wrap;
+                    font-size: 11px;
+                    color: Palette.foreground.transparentize(0.45);
+                }
+
+                Rectangle {
+                    height: 4px;
+                }
+
+                Heading {
+                    text: "EFFECT";
+                }
+
+                HorizontalLayout {
+                    spacing: 10px;
+                    ComboBox {
+                        width: 140px;
+                        model: root.effects;
+                        current-index <=> root.effect-index;
+                        selected => {
+                            root.effect-changed();
+                        }
+                    }
+
+                    Text {
+                        text: "Speed";
+                        vertical-alignment: center;
+                    }
+
+                    Slider {
+                        minimum: 0.2;
+                        maximum: 3.0;
+                        value <=> root.speed;
+                    }
+                }
+
+                Rectangle {
+                    height: 4px;
+                }
+
+                Heading {
+                    text: "CALIBRATION";
+                }
+
+                ComboBox {
+                    model: root.devices;
+                    enabled: root.devices.length > 0;
+                    current-index <=> root.calibration-device;
+                    selected => {
+                        root.calibration-device-changed();
+                    }
+                }
+
+                LabelledSlider {
+                    label: "R";
+                    minimum: 0.1;
+                    readout: round(root.cal-r * 100) + "%";
+                    value <=> root.cal-r;
+                    changed => {
+                        root.calibration-changed();
+                    }
+                    released => {
+                        root.calibration-released();
+                    }
+                }
+
+                LabelledSlider {
+                    label: "G";
+                    minimum: 0.1;
+                    readout: round(root.cal-g * 100) + "%";
+                    value <=> root.cal-g;
+                    changed => {
+                        root.calibration-changed();
+                    }
+                    released => {
+                        root.calibration-released();
+                    }
+                }
+
+                LabelledSlider {
+                    label: "B";
+                    minimum: 0.1;
+                    readout: round(root.cal-b * 100) + "%";
+                    value <=> root.cal-b;
+                    changed => {
+                        root.calibration-changed();
+                    }
+                    released => {
+                        root.calibration-released();
+                    }
+                }
+            }
+        }
+
+        // -- Actions --
+        HorizontalLayout {
+            spacing: 8px;
+            Button {
+                text: "Apply";
+                primary: true;
+                width: 110px;
+                clicked => {
+                    root.apply();
+                }
+            }
+
+            Button {
+                text: "LEDs Off";
+                width: 100px;
+                clicked => {
+                    root.leds-off();
+                }
+            }
+
+            Text {
+                text: root.status;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+                overflow: elide;
+                color: Palette.foreground.transparentize(0.3);
+            }
+
+            if root.can-save-hardware: Button {
+                text: "Save to Hardware";
+                clicked => {
+                    root.confirm-step = 1;
+                }
+            }
+        }
+
+        // -- Presets --
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: "Preset";
+                vertical-alignment: center;
+            }
+
+            ComboBox {
+                width: 170px;
+                model: root.presets;
+                current-index <=> root.preset-index;
+                selected(name) => {
+                    root.preset-selected(name);
+                }
+            }
+
+            LineEdit {
+                horizontal-stretch: 1;
+                placeholder-text: "Name for a new preset";
+                text <=> root.preset-name;
+                accepted => {
+                    root.save-preset(root.preset-name);
+                }
+            }
+
+            Button {
+                text: "Save";
+                clicked => {
+                    root.save-preset(root.preset-name);
+                }
+            }
+
+            Button {
+                text: "Delete";
+                enabled: root.preset-index > 0;
+                clicked => {
+                    root.delete-preset();
+                }
+            }
+
+            Text {
+                text: "On start";
+                vertical-alignment: center;
+            }
+
+            ComboBox {
+                width: 150px;
+                model: root.presets;
+                current-index <=> root.startup-index;
+                selected(name) => {
+                    root.startup-preset-changed(name);
+                }
+            }
+        }
+
+        // -- Options --
+        HorizontalLayout {
+            spacing: 18px;
+            alignment: start;
+            CheckBox {
+                text: "Off on close";
+                checked <=> root.off-on-close;
+                toggled => {
+                    root.options-changed();
+                }
+            }
+
+            CheckBox {
+                text: "Close to tray";
+                enabled: root.tray-available;
+                checked <=> root.close-to-tray;
+                toggled => {
+                    root.options-changed();
+                }
+            }
+
+            CheckBox {
+                text: "Start minimized";
+                enabled: root.tray-available;
+                checked <=> root.start-minimized;
+                toggled => {
+                    root.options-changed();
+                }
+            }
+
+            if root.autostart-supported: CheckBox {
+                text: "Start at login";
+                checked <=> root.start-at-login;
+                toggled => {
+                    root.start-at-login-toggled(root.start-at-login);
+                }
+            }
+        }
+    }
+
+    // -- Save to hardware: two confirmations, as flash writes are for keeps --
+    if root.confirm-step > 0: Rectangle {
+        background: #000000c0;
+
+        // Swallow clicks so nothing underneath can be pressed
+        TouchArea { }
+
+        Rectangle {
+            width: 500px;
+            height: confirm-box.preferred-height;
+            border-radius: 10px;
+            border-width: 1px;
+            border-color: #ffffff30;
+            background: Palette.background;
+
+            confirm-box := VerticalLayout {
+                padding: 20px;
+                spacing: 14px;
+
+                Text {
+                    text: root.confirm-step == 1 ? "Save to Hardware" : "Final confirmation";
+                    font-size: 16px;
+                    font-weight: 700;
+                }
+
+                Text {
+                    wrap: word-wrap;
+                    text: root.confirm-step == 1
+                        ? "This writes the current color and mode to the non-volatile flash memory of these devices:\n\n" + root.save-targets + "\n\nThe saved settings persist across power cycles (boot color). On RAM sticks this is known to be unstable with some ENE firmware versions and may in rare cases soft-lock the RGB controller, requiring a DIMM reseat to recover.\n\nMake sure you have already applied the color you want."
+                        : "Are you absolutely sure? This writes to hardware flash and cannot be undone easily.";
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    Button {
+                        text: "Cancel";
+                        clicked => {
+                            root.confirm-step = 0;
+                        }
+                    }
+
+                    Rectangle {
+                        horizontal-stretch: 1;
+                    }
+
+                    Button {
+                        text: root.confirm-step == 1 ? "I understand, continue" : "Save to Hardware";
+                        primary: root.confirm-step == 2;
+                        clicked => {
+                            if (root.confirm-step == 1) {
+                                root.confirm-step = 2;
+                            } else {
+                                root.confirm-step = 0;
+                                root.save-to-hardware();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// The tray icon. It has no window: its only UI is the menu.
+export component Tray inherits SystemTrayIcon {
+    in property <[string]> presets;
+    in property <image> tray-icon;
+    callback show-window();
+    callback load-preset(string);
+    callback leds-off();
+    callback quit();
+
+    icon: root.tray-icon;
+    tooltip: "frugalRGB";
+    title: "frugalRGB";
+
+    clicked => {
+        root.show-window();
+    }
+
+    Menu {
+        MenuItem {
+            title: "Show";
+            activated => {
+                root.show-window();
+            }
+        }
+
+        Menu {
+            title: "Load Preset";
+            for preset in root.presets: MenuItem {
+                title: preset;
+                activated => {
+                    root.load-preset(preset);
+                }
+            }
+        }
+
+        MenuItem {
+            title: "LEDs Off";
+            activated => {
+                root.leds-off();
+            }
+        }
+
+        MenuSeparator { }
+
+        MenuItem {
+            title: "Quit";
+            activated => {
+                root.quit();
+            }
+        }
+    }
+}
