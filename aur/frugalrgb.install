@@ -5,7 +5,7 @@ post_install() {
       udevadm trigger
     to apply the installed udev rules.
 
-    DRAM RGB (DDR5 via SMBus):
+    RAM RGB and ASUS GPU RGB (SMBus, i2c-dev):
       1. Add your user to the i2c group, then log out and back in:
            usermod -aG i2c $USER
       2. On boards whose BIOS claims the SMBus (most Gigabyte boards),

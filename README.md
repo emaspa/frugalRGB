@@ -13,22 +13,23 @@ This app was built for my specific hardware. It currently supports:
 | Device | Connection | Notes |
 |--------|-----------|-------|
 | ASRock Polychrome USB (VID `26CE`, PID `01A2`) | USB HID | Tested on ASRock Z890M Riptide. No admin needed. |
-| MSI Mystic Light (VID `1462`, 185-byte protocol) | USB HID | Tested on MSI MPG Z790I EDGE WIFI (PID `7E03`). No admin needed. |
-| Gigabyte RGB Fusion 2.0 (VID `048D`, ITE IT5711/IT5702/IT8297) | USB HID | Tested on Gigabyte X870E Aorus Master X3D. No admin needed. |
-| ASUS Aura USB (VID `0B05`) | USB HID | Mainboard protocol. Onboard RGB and addressable headers are read from the device's config table (PIDs `19AF`/`1939`/`18F3`). No admin needed. |
+| MSI Mystic Light (VID `1462`, 185-byte protocol) | USB HID | Tested on MSI MPG Z790I EDGE WIFI (PID `7E03`), the one board whose zones frugalRGB knows. Other Mystic Light boards get a single "All Zones" control. No admin needed. |
+| Gigabyte RGB Fusion 2.0 (VID `048D`, ITE IT5711/IT5702/IT8297/IT8950) | USB HID | Tested on Gigabyte X870E Aorus Master X3D. No admin needed. |
+| ASUS Aura USB (VID `0B05`) | USB HID | Mainboard protocol. Onboard RGB and addressable headers are read from the device's config table. PID `19AF` is supported, `1939` and `18F3` are experimental. No admin needed. |
 | Creative Sound BlasterX Katana (VID `041E`, PID `3247`) | USB HID | Soundbar with 49 LEDs. Static (one color or one per zone), breathing, color cycle and rainbow wave, all run by the soundbar itself. Edits the active device profile, so changes persist on the device like with the official app. No admin needed. |
-| ASUS GPU RGB (ENE controller at I2C `0x67`) | NvAPI I2C (Windows), i2c-dev (Linux) | Tested on ASUS TUF RTX 5090. No admin needed (Linux: `i2c` group). NVIDIA cards only. |
+| ASUS GPU RGB (ENE controller at I2C `0x67`) | NvAPI I2C (Windows), i2c-dev (Linux) | Tested on ASUS TUF RTX 5090. Any ASUS-built NVIDIA card with that controller is picked up. No admin needed (Linux: `i2c` group). |
 | ENE AUDA-series DDR5 RAM (addresses `0x70` to `0x77`) | SMBus (i801/PIIX4) | Tested with KLEVV DDR5 RGB. Needs admin on Windows (kernel-level SMBus access). On Linux the `i2c` group is enough. Intel (i801) and AMD (PIIX4) chipsets. |
+| ENE DDR4 RAM (same addresses, older protocol) | SMBus (i801/PIIX4) | One color per stick. The driver has been in the code since the first release, but I have no report of it on real sticks. Same access rules as DDR5. |
 
-### About 0.4.0
+### About 0.5.0
 
-Version 0.4.0 is a rewrite in Rust. Every driver was ported from the Python one and has to reproduce, byte for byte, what the Python driver sent to a simulated device. On real hardware I have so far only re-tested the Gigabyte board and the Katana, on Linux. If your device behaves differently than it did with 0.3.0, please [open an issue](../../issues) with the diagnostics file. 0.3.0 stays on the [Releases](../../releases) page.
+Version 0.5.0 is a rewrite in Rust. Every driver was ported from the Python one and has to reproduce, byte for byte, what the Python driver sent to a simulated device. On real hardware I have so far only re-tested the Gigabyte board and the Katana, on Linux. If your device behaves differently than it did with 0.3.0, please [open an issue](../../issues) with the diagnostics file. 0.3.0 stays on the [Releases](../../releases) page.
 
 Presets and settings carry over. One behavior changed on purpose. An unchecked zone is now switched off. Before, it was skipped and kept whatever it was showing.
 
 ### What about my hardware?
 
-The Diagnostics button writes `frugalrgb_diagnostics.txt` to your Desktop: system details, every USB HID device, an SMBus scan, register dumps of the detected controllers and your config. On Windows, run as administrator so it can include the RAM. `frugalrgb diagnostics` prints the same report in a terminal.
+The Diagnostics button writes `frugalrgb_diagnostics.txt` to your Desktop: system details, every USB HID device, an SMBus scan, register dumps of the detected controllers, your config and presets, and the app's log. On Windows, run as administrator so it can include the RAM. `frugalrgb diagnostics` prints the same report in a terminal.
 
 If you'd like support for your hardware, [open an issue](../../issues) and attach that file. I'll look into it when I can, but this is a personal project and I can't promise anything.
 
@@ -38,8 +39,9 @@ If you'd like support for your hardware, [open an issue](../../issues) and attac
 - Breathing, color cycle, rainbow and strobe with adjustable speed. Devices that have the effect built in run it themselves. The others get frames from frugalRGB at 30 fps.
 - **Per-zone color.** Every RGB zone (Logo, Accent, D_LED1, LED 1 to 8, etc.) is its own row with its own color and checkbox. An unchecked zone is switched off, even when "All Zones" is checked. Uncheck every zone of a device and frugalRGB leaves that device alone.
 - Per-device calibration with three sliders that scale red, green and blue, for LEDs whose white is off.
-- Presets store each zone's color and checkbox, the effect and the speed. One of them can be applied at startup.
-- Tray icon with a menu to show the window, load a preset, switch the LEDs off or quit. The window can close to the tray and start hidden in it.
+- Presets store each zone's color and checkbox, the effect and the speed. The "On start" preset is applied when frugalRGB starts.
+- Tray icon. A click brings the window up, and its menu loads a preset, switches the LEDs off or quits. The window can close to the tray and start hidden in it.
+- "Off on close" switches the LEDs off when frugalRGB quits.
 - **Start at login.** On Linux this writes an XDG autostart entry to `~/.config/autostart/`. On Windows it puts a shortcut in the Startup folder. When frugalRGB runs as administrator, the shortcut starts a scheduled task that brings the app up elevated at login without a UAC prompt, which RAM RGB needs. Windows Defender may flag the creation of that task.
 - **Save to Hardware** writes the current color and mode to the device's flash, so it is there at power-on. Read the [warning](#save-to-hardware-warning) first.
 - **Device Test** lights one device in red, green, blue and white, then puts your colors back. It shows whether the device answers at all and whether its color channels are in the right order.
@@ -127,7 +129,7 @@ bash packaging/build_deb.sh    # output: dist/frugalrgb_<version>_<arch>.deb
 
 ### From source
 
-You need Rust 1.89 or newer ([rustup](https://rustup.rs/)). On Linux, also the headers for udev and fontconfig:
+You need Rust 1.92 or newer ([rustup](https://rustup.rs/)). On Linux, also the headers for udev and fontconfig:
 
 ```bash
 sudo pacman -S fontconfig systemd-libs                        # Arch
@@ -190,14 +192,14 @@ Add `-v` to see what is being detected and written.
 
 ## Configuration
 
-Config files are stored in your home directory:
+Config files are stored in your home directory (`%USERPROFILE%` on Windows):
 
-- `~/.frugalrgb_config.json`: calibration, UI options, startup preset
+- `~/.frugalrgb_config.json`: calibration, options, startup preset, window size
 - `~/.frugalrgb_presets.json`: saved presets
 
 ### Save to Hardware warning
 
-The Save to Hardware button writes the current color and mode to the device's non-volatile flash memory, so it persists across power cycles and shows before the operating system loads. It is offered for ENE RAM and GPU controllers, Gigabyte RGB Fusion 2.0 and ASUS Aura mainboard controllers.
+The Save to Hardware button writes the current color and mode to the device's non-volatile flash memory, so it persists across power cycles and shows before the operating system loads. It is offered for ENE DDR5 RAM and GPU controllers, Gigabyte RGB Fusion 2.0, MSI Mystic Light and ASUS Aura mainboard controllers.
 
 > **Use at your own risk.** This operation is known to be unstable on some ENE firmware versions. In rare cases it can soft-lock the RGB controller, making the LEDs unresponsive. Recovery typically requires physically reseating the DIMM. OpenRGB disables this feature by default for the same reason.
 >
@@ -230,9 +232,10 @@ crates/
     tests/                    Engine and store tests, driver transcripts
   frugalrgb/                  The executable
     src/main.rs, cli.rs       Command line
-    src/gui.rs, ui/app.slint  Window and tray icon (Slint, software renderer)
+    src/gui.rs, ui/app.slint  The window (Slint, software renderer)
     src/tray.rs               Tray icon and its menu
     src/autostart.rs          Start at login
+    src/logging.rs            Log to the terminal, kept for the diagnostics report
 tools/
   gen_golden.py               Records the transcripts the driver tests replay
   reference/                  The Python drivers of 0.3.0, kept as the reference

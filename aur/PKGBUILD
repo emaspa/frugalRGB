@@ -1,6 +1,6 @@
 # Maintainer: Emanuele Sparvoli <sparvoli@gmail.com>
 pkgname=frugalrgb
-pkgver=0.4.0
+pkgver=0.5.0
 pkgrel=1
 pkgdesc="Lightweight standalone RGB controller for PC hardware (no bloat, just LEDs)"
 arch=('x86_64' 'aarch64')

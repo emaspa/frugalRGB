@@ -1,21 +1,23 @@
-# udev rules for frugalRGB — grant the locally logged-in user access to
-# supported RGB controllers (TAG+="uaccess" sets an ACL for the active seat).
+# udev rules for frugalRGB: grant the locally logged-in user access to the
+# supported USB RGB controllers (TAG+="uaccess" sets an ACL for the active seat).
 #
-# Each device gets two rules: the usb device node (for hidapi builds using the
-# libusb backend — e.g. PyPI wheels) and the hidraw node (for hidraw builds).
+# frugalRGB talks to these devices through hidraw, so the hidraw rule is the
+# one it needs. The usb rule covers programs that open the same device through
+# libusb, which is hidapi's other backend on Linux.
 # The file MUST sort before 73-seat-late.rules or the uaccess tag is ignored.
 #
 # Install: copy to /etc/udev/rules.d/ (or /usr/lib/udev/rules.d/ when packaged),
 # then: udevadm control --reload && udevadm trigger
 #
-# The ASUS GPU controller uses NvAPI and is Windows-only — no rule needed.
+# RAM and ASUS GPU RGB go through /dev/i2c-*, which the i2c group opens.
+# They need no rule here.
 
 # ASRock Polychrome USB
 SUBSYSTEM=="usb", ATTR{idVendor}=="26ce", ATTR{idProduct}=="01a2", TAG+="uaccess"
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="26ce", ATTRS{idProduct}=="01a2", TAG+="uaccess"
 
-# MSI Mystic Light (detection matches by product string across the vendor ID,
-# so the rule is VID-wide to mirror it)
+# MSI Mystic Light (detection goes by product string across the vendor ID,
+# so the rule covers the whole vendor ID too)
 SUBSYSTEM=="usb", ATTR{idVendor}=="1462", TAG+="uaccess"
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1462", TAG+="uaccess"
 
