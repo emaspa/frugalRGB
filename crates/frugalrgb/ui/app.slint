@@ -1,4 +1,4 @@
-import { Button, CheckBox, ComboBox, LineEdit, Palette, ScrollView, Slider } from "std-widgets.slint";
+import { Button, CheckBox, ComboBox, LineEdit, Palette, ScrollView } from "std-widgets.slint";
 
 // One zone of a device, as a row in the zone list.
 export struct ZoneCard {
@@ -125,12 +125,112 @@ component ColorButton inherits Rectangle {
     }
 }
 
+// A slider whose filled part and knob take a colour of their own.
+component TintSlider inherits Rectangle {
+    in property <float> minimum: 0;
+    in property <float> maximum: 1;
+    in-out property <float> value;
+    in property <color> tint: Palette.accent-background;
+    // Fires while the value moves, by pointer or by key.
+    callback changed();
+    // Fires when the user lets go.
+    callback released();
+
+    property <length> knob: 20px;
+    property <length> travel: self.width - root.knob;
+    property <float> share: root.maximum > root.minimum ? clamp((root.value - root.minimum) / (root.maximum - root.minimum), 0, 1) : 0;
+
+    min-width: 80px;
+    // As tall as the knob, so three of them stack as tightly as before
+    min-height: root.knob;
+    horizontal-stretch: 1;
+
+    function move-to(x: length) {
+        root.value = root.minimum + clamp((x - root.knob / 2) / root.travel, 0, 1) * (root.maximum - root.minimum);
+        root.changed();
+    }
+
+    function step(direction: float) {
+        root.value = clamp(root.value + direction * (root.maximum - root.minimum) / 50, root.minimum, root.maximum);
+        root.changed();
+        root.released();
+    }
+
+    Rectangle {
+        x: root.knob / 2;
+        y: (parent.height - self.height) / 2;
+        width: root.travel;
+        height: 4px;
+        border-radius: 2px;
+        background: #ffffff38;
+    }
+
+    Rectangle {
+        x: root.knob / 2;
+        y: (parent.height - self.height) / 2;
+        width: root.travel * root.share;
+        height: 4px;
+        border-radius: 2px;
+        background: root.tint;
+    }
+
+    Rectangle {
+        x: root.travel * root.share;
+        y: (parent.height - self.height) / 2;
+        width: root.knob;
+        height: root.knob;
+        border-radius: root.knob / 2;
+        border-width: 1px;
+        border-color: keys.has-focus ? #ffffff : #ffffff28;
+        background: #454545;
+
+        Rectangle {
+            width: touch.pressed ? 10px : touch.has-hover ? 14px : 12px;
+            height: self.width;
+            border-radius: self.width / 2;
+            background: root.tint;
+        }
+    }
+
+    keys := FocusScope {
+        key-pressed(event) => {
+            if (event.text == Key.LeftArrow || event.text == Key.DownArrow) {
+                root.step(-1);
+                return accept;
+            }
+            if (event.text == Key.RightArrow || event.text == Key.UpArrow) {
+                root.step(1);
+                return accept;
+            }
+            reject
+        }
+
+        touch := TouchArea {
+            pointer-event(event) => {
+                if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down) {
+                    keys.focus();
+                    root.move-to(self.mouse-x);
+                }
+                if (event.button == PointerEventButton.left && event.kind == PointerEventKind.up) {
+                    root.released();
+                }
+            }
+            moved => {
+                if (self.pressed) {
+                    root.move-to(self.mouse-x);
+                }
+            }
+        }
+    }
+}
+
 component LabelledSlider inherits HorizontalLayout {
     in property <string> label;
     in property <string> readout;
     in property <float> minimum: 0;
     in property <float> maximum: 1;
     in-out property <float> value;
+    in property <color> tint: Palette.accent-background;
     callback changed();
     callback released();
 
@@ -142,9 +242,10 @@ component LabelledSlider inherits HorizontalLayout {
         vertical-alignment: center;
     }
 
-    Slider {
+    TintSlider {
         minimum: root.minimum;
         maximum: root.maximum;
+        tint: root.tint;
         value <=> root.value;
         changed => {
             root.changed();
@@ -160,6 +261,114 @@ component LabelledSlider inherits HorizontalLayout {
         horizontal-alignment: right;
         vertical-alignment: center;
         color: Palette.foreground.transparentize(0.3);
+    }
+}
+
+// The picker's square: saturation runs left to right, brightness bottom
+// to top, for the hue the strip below it selects.
+component ShadeField inherits Rectangle {
+    in property <float> hue;
+    in-out property <float> saturation;
+    in-out property <float> brightness;
+    callback changed();
+
+    height: 220px;
+    border-radius: 6px;
+    background: hsv(root.hue, 1, 1);
+
+    function move-to(x: length, y: length) {
+        root.saturation = clamp(x / self.width, 0, 1);
+        root.brightness = 1 - clamp(y / self.height, 0, 1);
+        root.changed();
+    }
+
+    Rectangle {
+        border-radius: 6px;
+        background: @linear-gradient(90deg, #ffffffff 0%, #ffffff00 100%);
+    }
+
+    Rectangle {
+        border-radius: 6px;
+        background: @linear-gradient(180deg, #00000000 0%, #000000ff 100%);
+    }
+
+    Rectangle {
+        x: root.saturation * parent.width - self.width / 2;
+        y: (1 - root.brightness) * parent.height - self.height / 2;
+        width: 18px;
+        height: 18px;
+        border-radius: 9px;
+        border-width: 1px;
+        border-color: #000000a0;
+        background: #ffffff;
+
+        Rectangle {
+            width: 12px;
+            height: 12px;
+            border-radius: 6px;
+            background: hsv(root.hue, root.saturation, root.brightness);
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: crosshair;
+        pointer-event(event) => {
+            if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down) {
+                root.move-to(self.mouse-x, self.mouse-y);
+            }
+        }
+        moved => {
+            if (self.pressed) {
+                root.move-to(self.mouse-x, self.mouse-y);
+            }
+        }
+    }
+}
+
+// The picker's strip: every hue, red to red.
+component HueStrip inherits Rectangle {
+    in-out property <float> hue;
+    callback changed();
+
+    height: 20px;
+    border-radius: 6px;
+    background: @linear-gradient(90deg, #ff0000 0%, #ffff00 16.67%, #00ff00 33.33%, #00ffff 50%, #0000ff 66.67%, #ff00ff 83.33%, #ff0000 100%);
+
+    function move-to(x: length) {
+        root.hue = clamp(x / self.width, 0, 1) * 360;
+        root.changed();
+    }
+
+    Rectangle {
+        x: root.hue / 360 * parent.width - self.width / 2;
+        y: -3px;
+        width: 12px;
+        height: parent.height + 6px;
+        border-radius: 5px;
+        border-width: 1px;
+        border-color: #000000a0;
+        background: #ffffff;
+
+        Rectangle {
+            width: 6px;
+            height: parent.height - 6px;
+            border-radius: 3px;
+            background: hsv(root.hue, 1, 1);
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        pointer-event(event) => {
+            if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down) {
+                root.move-to(self.mouse-x);
+            }
+        }
+        moved => {
+            if (self.pressed) {
+                root.move-to(self.mouse-x);
+            }
+        }
     }
 }
 
@@ -272,6 +481,7 @@ export component MainWindow inherits Window {
     // The user changed the brush (as opposed to a preset setting it).
     callback brush-picked();
     callback hex-entered(string);
+    property <bool> picker-open;
 
     public function set-brush(shade: color) {
         // Black and greys have no hue of their own: keep the slider put
@@ -445,12 +655,20 @@ export component MainWindow inherits Window {
                 HorizontalLayout {
                     spacing: 12px;
 
+                    // The brush. Clicking it opens the picker.
                     Rectangle {
                         width: 64px;
                         border-radius: 8px;
                         border-width: 1px;
-                        border-color: #ffffff40;
+                        border-color: brush-touch.has-hover ? #ffffff : #ffffff40;
                         background: root.brush;
+
+                        brush-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                root.picker-open = true;
+                            }
+                        }
                     }
 
                     VerticalLayout {
@@ -570,7 +788,7 @@ export component MainWindow inherits Window {
                         vertical-alignment: center;
                     }
 
-                    Slider {
+                    TintSlider {
                         minimum: 0.2;
                         maximum: 3.0;
                         value <=> root.speed;
@@ -596,6 +814,7 @@ export component MainWindow inherits Window {
 
                 LabelledSlider {
                     label: "R";
+                    tint: #ff4d4d;
                     minimum: 0.1;
                     readout: round(root.cal-r * 100) + "%";
                     value <=> root.cal-r;
@@ -609,6 +828,7 @@ export component MainWindow inherits Window {
 
                 LabelledSlider {
                     label: "G";
+                    tint: #3fd45f;
                     minimum: 0.1;
                     readout: round(root.cal-g * 100) + "%";
                     value <=> root.cal-g;
@@ -622,6 +842,7 @@ export component MainWindow inherits Window {
 
                 LabelledSlider {
                     label: "B";
+                    tint: #4d94ff;
                     minimum: 0.1;
                     readout: round(root.cal-b * 100) + "%";
                     value <=> root.cal-b;
@@ -874,6 +1095,54 @@ export component MainWindow inherits Window {
                 enabled: !root.test-running;
                 clicked => {
                     root.run-test();
+                }
+            }
+        }
+    }
+
+    // -- Colour picker --
+    if root.picker-open: Modal {
+        title: "Pick a color";
+
+        ShadeField {
+            hue: root.hue;
+            saturation <=> root.saturation;
+            brightness <=> root.brightness;
+            changed => {
+                root.brush-picked();
+            }
+        }
+
+        HueStrip {
+            hue <=> root.hue;
+            changed => {
+                root.brush-picked();
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 12px;
+
+            Rectangle {
+                width: 46px;
+                border-radius: 6px;
+                border-width: 1px;
+                border-color: #ffffff40;
+                background: root.brush;
+            }
+
+            Text {
+                text: root.brush-text;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+                color: Palette.foreground.transparentize(0.3);
+            }
+
+            Button {
+                text: "Done";
+                primary: true;
+                clicked => {
+                    root.picker-open = false;
                 }
             }
         }

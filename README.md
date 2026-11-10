@@ -35,7 +35,7 @@ If you'd like support for your hardware, [open an issue](../../issues) and attac
 
 ## Features
 
-- Static color from the HSV sliders, the color buttons, or a typed `#RRGGBB` or `R,G,B` value.
+- Static color from the color picker (click the color preview), the HSV sliders, the color buttons, or a typed `#RRGGBB` or `R,G,B` value.
 - Breathing, color cycle, rainbow and strobe with adjustable speed. Devices that have the effect built in run it themselves. The others get frames from frugalRGB at 30 fps.
 - **Per-zone color.** Every RGB zone (Logo, Accent, D_LED1, LED 1 to 8, etc.) is its own row with its own color and checkbox. An unchecked zone is switched off, even when "All Zones" is checked. Uncheck every zone of a device and frugalRGB leaves that device alone.
 - Per-device calibration with three sliders that scale red, green and blue, for LEDs whose white is off.
