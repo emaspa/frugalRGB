@@ -138,7 +138,8 @@ class AsusAuraUSBController(RGBController):
 
     def _write(self, data: list[int]) -> None:
         """Send a 65-byte output report (report ID 0xEC + 64 data bytes)."""
-        self._dev.write(_pad([AURA_PREFIX] + list(data)))
+        if self._dev.write(_pad([AURA_PREFIX] + list(data))) < 0:
+            raise IOError("ASUS Aura: HID write failed")
 
     def _query(self, request: int, reply_id: int,
                data_offset: int, length: int) -> list[int] | None:
@@ -260,7 +261,7 @@ class AsusAuraUSBController(RGBController):
 
     def _setup_zones(self) -> None:
         # Zone 0 is a convenience "all zones" master; zones 1..N map to channels.
-        self._zones = [RGBZone(0, "All Zones")]
+        self._zones = [RGBZone(0, "All Zones", is_all=True)]
         addr_n = 0
         for i, dev in enumerate(self._devices):
             if dev["type"] == TYPE_FIXED:

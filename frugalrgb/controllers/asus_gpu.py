@@ -86,7 +86,7 @@ class ASUSGPUController(RGBController):
         if self._num_leds == 1:
             self._zones = [RGBZone(0, "GPU")]
         else:
-            self._zones = [RGBZone(0, "All LEDs")]
+            self._zones = [RGBZone(0, "All LEDs", is_all=True)]
             for i in range(self._num_leds):
                 self._zones.append(RGBZone(i + 1, f"LED {i + 1}"))
 

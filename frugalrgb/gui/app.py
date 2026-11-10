@@ -16,7 +16,7 @@ from ..controllers.base import RGBController, RGBMode
 from ..controllers.asus_aura_usb import AsusAuraUSBController
 from ..diagnostics import collect_diagnostics
 from ..icon import create_app_icon
-from ..effects.engine import EffectEngine
+from ..effects.engine import EffectEngine, resolve_entries
 from .widgets import CalibrationPanel, ColorPresetBar, DeviceCard, EffectSelector
 
 log = logging.getLogger(__name__)
@@ -324,13 +324,15 @@ class FrugalRGBApp(ctk.CTk):
         self._apply()
 
     def _get_entries(self) -> list[tuple]:
-        """Return list of (ctrl, zone_id, r, g, b) for all enabled cards."""
-        entries = []
-        for card, ctrl, zone_id in self._device_cards:
-            if card.enabled:
-                r, g, b = card.current_color
-                entries.append((ctrl, zone_id, r, g, b))
-        return entries
+        """Return the (ctrl, zone_id, colour) state the cards describe.
+
+        Checked cards are lit, unchecked ones are driven dark, and a device
+        with nothing checked is left alone. See resolve_entries.
+        """
+        return resolve_entries(
+            (ctrl, zone_id, card.enabled, card.current_color)
+            for card, ctrl, zone_id in self._device_cards
+        )
 
     def _apply(self) -> None:
         effect = self._effect_selector.selected_effect
@@ -345,15 +347,13 @@ class FrugalRGBApp(ctk.CTk):
         self._engine.start_effect(effect, speed, entries)
 
     def _save_to_hardware(self) -> None:
-        """Save current color/mode to DRAM NV flash with double confirmation."""
-        saveable = [
-            (card, ctrl) for card, ctrl, _zid in self._device_cards
-            if ctrl.supports_hardware_save
-        ]
+        """Save current color/mode to device flash with double confirmation."""
+        # One flash write per device, however many zone cards it has
+        saveable = [ctrl for ctrl in self._controllers if ctrl.supports_hardware_save]
         if not saveable:
             return
 
-        names = "\n".join(f"  - {ctrl.name}" for _, ctrl in saveable)
+        names = "\n".join(f"  - {ctrl.name}" for ctrl in saveable)
 
         # First confirmation — explain the risk
         dlg1 = ctk.CTkToplevel(self)
@@ -370,11 +370,11 @@ class FrugalRGBApp(ctk.CTk):
 
         warning_text = (
             "This will write the current color and mode to the\n"
-            "non-volatile flash memory on your RAM sticks:\n\n"
+            "non-volatile flash memory of these devices:\n\n"
             f"{names}\n\n"
             "The saved settings will persist across power cycles\n"
-            "(boot color). This operation is known to be unstable\n"
-            "on some ENE firmware versions and may in rare cases\n"
+            "(boot color). On RAM sticks this is known to be unstable\n"
+            "with some ENE firmware versions and may in rare cases\n"
             "soft-lock the RGB controller, requiring a DIMM reseat\n"
             "to recover.\n\n"
             "Make sure you have already Applied the desired color."
@@ -444,7 +444,7 @@ class FrugalRGBApp(ctk.CTk):
             return
 
         # Perform the save
-        for _card, ctrl in saveable:
+        for ctrl in saveable:
             try:
                 ctrl.save_to_hardware()
             except Exception as e:
@@ -469,9 +469,8 @@ class FrugalRGBApp(ctk.CTk):
 
     def _turn_off(self) -> None:
         log.info("Turning off all LEDs")
-        entries = [(ctrl, zid, 0, 0, 0) for _card, ctrl, zid in self._device_cards]
+        entries = [(ctrl, zid, None) for _card, ctrl, zid in self._device_cards]
         self._engine.turn_off(entries)
-        self._on_color_selected(0, 0, 0, all_devices=True)
 
     def _load_presets_list(self) -> dict:
         """Load presets from file and return the dict."""
@@ -1076,9 +1075,12 @@ class FrugalRGBApp(ctk.CTk):
         self._engine.stop()
         if self._off_on_close_var.get():
             for ctrl in self._controllers:
-                ctrl.set_mode(RGBMode.OFF)
-                ctrl.set_color(0, 0, 0)
-                ctrl.apply()
+                try:
+                    ctrl.set_mode(RGBMode.OFF)
+                    ctrl.set_color(0, 0, 0)
+                    ctrl.apply()
+                except (IOError, OSError, TimeoutError) as e:
+                    log.warning("Failed to turn off %s: %s", ctrl.name, e)
         if self._tray_icon is not None:
             self._tray_icon.stop()
         self.destroy()

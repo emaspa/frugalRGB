@@ -14,9 +14,12 @@ class RGBMode(IntEnum):
 class RGBZone:
     """Represents a single controllable RGB zone on a device."""
 
-    def __init__(self, zone_id: int, name: str):
+    def __init__(self, zone_id: int, name: str, is_all: bool = False):
         self.zone_id = zone_id
         self.name = name
+        # True for a pseudo-zone that addresses every LED on the device
+        # ("All Zones"), as opposed to one physical zone.
+        self.is_all = is_all
 
 
 class RGBController(ABC):
@@ -40,6 +43,15 @@ class RGBController(ABC):
     @abstractmethod
     def set_color(self, r: int, g: int, b: int, zone: int | None = None) -> None:
         """Set a static color. If zone is None, set all zones."""
+
+    def set_zone_off(self, zone: int | None = None) -> None:
+        """Make one zone dark while the rest of the device keeps its mode.
+
+        The default writes black in the current mode, which is dark for every
+        mode that honours the zone colour. Controllers with a per-zone mode
+        override this so the zone also stays dark in colour-cycling modes.
+        """
+        self.set_color(0, 0, 0, zone=zone)
 
     @abstractmethod
     def set_mode(self, mode: RGBMode, speed: int = 3) -> None:

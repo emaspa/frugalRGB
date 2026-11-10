@@ -79,7 +79,8 @@ class ASRockPolychromeUSBController(RGBController):
     def _hid_write_read(self, buf: list[int]) -> list[int]:
         """Send a 65-byte report and read the 64-byte response."""
         packet = buf + [0x00] * (REPORT_SIZE - len(buf))
-        self._dev.write(packet)
+        if self._dev.write(packet) < 0:
+            raise IOError("ASRock Polychrome: HID write failed")
         response = self._dev.read(64, timeout_ms=1000)
         return response if response else []
 
@@ -188,6 +189,16 @@ class ASRockPolychromeUSBController(RGBController):
         buf[0x10] = 0x01 if all_zones else 0x00
 
         self._hid_write_read(buf)
+
+    def set_zone_off(self, zone: int | None = None) -> None:
+        # The mode is per zone here, so send this zone the same "off" packet
+        # LEDs Off uses; black alone would still animate in colour-cycle modes.
+        saved = self._current_mode
+        self._current_mode = RGBMode.OFF
+        try:
+            self.set_color(0, 0, 0, zone=zone)
+        finally:
+            self._current_mode = saved
 
     def set_mode(self, mode: RGBMode, speed: int = 3) -> None:
         self._current_mode = mode

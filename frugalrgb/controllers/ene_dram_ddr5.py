@@ -59,7 +59,7 @@ class ENEDDR5Controller(RGBController):
             log.debug("LED count from config: %d", self._num_leds)
 
         # Build zones: "All LEDs" + one per individual LED
-        self._zones = [RGBZone(0, "All LEDs")]
+        self._zones = [RGBZone(0, "All LEDs", is_all=True)]
         for i in range(self._num_leds):
             self._zones.append(RGBZone(i + 1, f"LED {i + 1}"))
 

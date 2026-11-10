@@ -97,7 +97,7 @@ class CreativeKatanaController(RGBController):
         # Cache of state already written to the device, to skip redundant writes
         self._written: dict = {}
 
-        self._zones = [RGBZone(0, "All Zones")] + [
+        self._zones = [RGBZone(0, "All Zones", is_all=True)] + [
             RGBZone(z, f"Zone {z}") for z in range(1, NUM_GROUPS + 1)
         ]
 

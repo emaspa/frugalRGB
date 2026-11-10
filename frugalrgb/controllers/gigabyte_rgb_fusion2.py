@@ -2,6 +2,7 @@
 
 import logging
 import struct
+import time
 
 from .base import RGBController, RGBMode, RGBZone
 
@@ -41,7 +42,8 @@ HARDWARE_ANIMATED_MODES = {
 }
 
 # LED index -> header register byte
-# Indices 0-7 map to 0x20-0x27, indices 8-10 map to 0x90-0x92 (IT5711 only)
+# Indices 0-7 map to 0x20-0x27, indices 8-10 map to 0x90-0x92 (IT5711 only;
+# IT5702 is an IT8297-class chip with the 8 base registers)
 _LED_HEADERS = {i: 0x20 + i for i in range(8)}
 _LED_HEADERS.update({8: 0x90, 9: 0x91, 10: 0x92})
 
@@ -52,6 +54,7 @@ LAYOUT_X870E = [
     (5, "D_LED1"),
     (6, "D_LED2"),
     (7, "D_LED3"),
+    (8, "D_LED4"),
     (9, "Logo"),
     (10, "Accent"),
 ]
@@ -70,7 +73,7 @@ LAYOUT_IT8297 = [
 # Chip PID -> default layout
 CHIP_LAYOUTS = {
     PID_IT5711: LAYOUT_X870E,
-    PID_IT5702: LAYOUT_X870E,
+    PID_IT5702: LAYOUT_IT8297,
     PID_IT8950: LAYOUT_IT8297,
     PID_IT8297: LAYOUT_IT8297,
 }
@@ -112,7 +115,7 @@ class GigabyteRGBFusion2Controller(RGBController):
         self._device_name = ""
         self._fw_version = ""
         self._chip_id = 0
-        self._is_5711 = pid in (PID_IT5711, PID_IT5702)
+        self._is_5711 = pid == PID_IT5711
         self._accumulated_mask = 0
 
         self._init_device()
@@ -120,7 +123,9 @@ class GigabyteRGBFusion2Controller(RGBController):
     # -- Low-level HID --
 
     def _send_packet(self, pkt: bytearray) -> None:
-        self._dev.send_feature_report(list(pkt))
+        # hidapi reports a failed write as a negative return, not an exception
+        if self._dev.send_feature_report(list(pkt)) < 0:
+            raise IOError(f"Gigabyte RGB: feature report 0x{pkt[1]:02X} failed")
 
     def _recv_packet(self) -> list[int]:
         return list(self._dev.get_feature_report(REPORT_ID, PACKET_SIZE))
@@ -185,7 +190,7 @@ class GigabyteRGBFusion2Controller(RGBController):
     def _setup_zones(self) -> None:
         layout = CHIP_LAYOUTS.get(self._pid, LAYOUT_IT8297)
 
-        self._zones = [RGBZone(0, "All Zones")]
+        self._zones = [RGBZone(0, "All Zones", is_all=True)]
         self._zone_leds = [None]
 
         for led_idx, zone_name in layout:
@@ -283,6 +288,16 @@ class GigabyteRGBFusion2Controller(RGBController):
                 if led_idx is not None:
                     self._send_packet(self._build_effect_pkt(led_idx, r, g, b))
 
+    def set_zone_off(self, zone: int | None = None) -> None:
+        # The mode is per zone here, so send this zone the same "off" packet
+        # LEDs Off uses; black alone would still animate in colour-cycle modes.
+        saved = self._current_mode
+        self._current_mode = RGBMode.OFF
+        try:
+            self.set_color(0, 0, 0, zone=zone)
+        finally:
+            self._current_mode = saved
+
     def set_mode(self, mode: RGBMode, speed: int = 3) -> None:
         self._current_mode = mode
         self._current_speed = speed
@@ -300,7 +315,11 @@ class GigabyteRGBFusion2Controller(RGBController):
         return True
 
     def save_to_hardware(self) -> None:
+        # Enable persistence, then write the current state to flash. Without
+        # the 0x5E write the board keeps booting with its old stored colours.
         self._send_cmd(0x47, 0x01)
+        time.sleep(0.02)
+        self._send_cmd(0x5E, 0x00)
         log.info("Saved settings to hardware on %s", self.name)
 
     def close(self) -> None:

@@ -26,7 +26,7 @@ There is a **Diagnostics** button in the app that collects device info, register
 
 - **Static color** — pick any color via the color picker, preset buttons, or manual RGB entry
 - **Effects** — breathing, color cycle, rainbow, strobe — all with adjustable speed
-- **Per-zone color** — every RGB zone (Logo, Accent, D_LED1, LED 1–8, etc.) is its own card with independent color and on/off control
+- **Per-zone color.** Every RGB zone (Logo, Accent, D_LED1, LED 1 to 8, etc.) is its own card with its own color and checkbox. An unchecked zone is switched off, even when "All Zones" is checked. Uncheck every zone of a device and frugalRGB leaves that device alone.
 - **Per-device calibration** — RGB brightness correction sliders per device to compensate for LED imbalance
 - **Presets** — save/load/overwrite/delete named presets; saves per-zone color, enabled state, effect, and speed
 - **Startup preset** — automatically apply a preset on launch

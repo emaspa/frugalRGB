@@ -119,7 +119,7 @@ class MSIMysticLightController(RGBController):
 
         # Onboard LEDs zone (always present if we got a valid state)
         if self._state and self._state[0] == REPORT_ID:
-            self._zones.append(RGBZone(0, "All Zones"))
+            self._zones.append(RGBZone(0, "All Zones", is_all=True))
             self._zone_keys.append("ALL")
 
             # Check individual zones by looking at whether their effect byte
@@ -242,6 +242,16 @@ class MSIMysticLightController(RGBController):
                     self._set_zone_data(key, mode_val, r, g, b,
                                         speed=speed, rainbow=rainbow)
 
+    def set_zone_off(self, zone: int | None = None) -> None:
+        # The mode is per zone here, so send this zone the same "off" packet
+        # LEDs Off uses; black alone would still animate in colour-cycle modes.
+        saved = self._current_mode
+        self._current_mode = RGBMode.OFF
+        try:
+            self.set_color(0, 0, 0, zone=zone)
+        finally:
+            self._current_mode = saved
+
     def set_mode(self, mode: RGBMode, speed: int = 3) -> None:
         self._current_mode = mode
         self._current_speed = MSI_SPEED_MAP.get(speed, 1)
@@ -251,7 +261,8 @@ class MSIMysticLightController(RGBController):
             return
         self._state[184] = 1 if save else 0
         try:
-            self._dev.send_feature_report(self._state)
+            if self._dev.send_feature_report(self._state) < 0:
+                raise IOError("feature report rejected")
             log.debug("MSI: sent %d-byte feature report (save=%s)",
                       len(self._state), save)
         except Exception as e:
