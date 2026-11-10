@@ -1,5 +1,5 @@
 post_install() {
-  cat <<'EOF'
+  cat <<'MSG'
 ==> frugalRGB setup:
     USB RGB (motherboard): replug the device or run
       udevadm trigger
@@ -12,10 +12,7 @@ post_install() {
          the kernel refuses to bind the SMBus driver. Add
            acpi_enforce_resources=lax
          to the kernel command line and reboot. See the README.
-
-    Transparent system tray icon (optional):
-      pacman -S python-gobject libayatana-appindicator
-EOF
+MSG
 }
 
 post_upgrade() {

@@ -7,7 +7,8 @@ on:
 
 jobs:
   build-deb:
-    runs-on: ubuntu-latest
+    # The oldest runner, so the package also installs on older releases
+    runs-on: ubuntu-22.04
     permissions:
       contents: write
     steps:
@@ -16,7 +17,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3-pil python3-pip xvfb
+          sudo apt-get install -y pkg-config libudev-dev libfontconfig1-dev
 
       - name: Build .deb
         run: bash packaging/build_deb.sh
@@ -24,10 +25,8 @@ jobs:
       - name: Smoke-test install
         run: |
           sudo apt-get install -y ./dist/frugalrgb_*.deb
-          command -v frugalrgb
-          # pystray connects to the X display at import time — needs xvfb here
-          PYTHONPATH=/usr/lib/frugalrgb/vendor xvfb-run -a python3 -c \
-            "import customtkinter, CTkColorPicker, hid, smbus2, pystray, PIL"
+          frugalrgb --version
+          frugalrgb presets
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
