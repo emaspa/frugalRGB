@@ -277,4 +277,4 @@ modules/
 
 ## License
 
-[MIT License](LICENSE)
+[GNU Affero General Public License v3.0 or later](LICENSE). Versions up to 0.3.0 were released under the MIT License.
