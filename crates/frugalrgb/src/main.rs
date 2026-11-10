@@ -12,6 +12,8 @@ mod cli;
 #[cfg(feature = "gui")]
 mod gui;
 mod logging;
+#[cfg(feature = "gui")]
+mod tray;
 
 const USAGE: &str = "\
 frugalrgb - no bloat, just LEDs

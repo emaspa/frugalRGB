@@ -44,7 +44,7 @@ If you'd like support for your hardware, [open an issue](../../issues) and attac
 - **Save to Hardware** writes the current color and mode to the device's flash, so it is there at power-on. Read the [warning](#save-to-hardware-warning) first.
 - **Device Test** lights one device in red, green, blue and white, then puts your colors back. It shows whether the device answers at all and whether its color channels are in the right order.
 - Command line for scripts: see [below](#command-line).
-- Only one instance runs at a time. Starting a second one tells you where the first one is.
+- Only one instance runs at a time. Starting frugalRGB again brings up the window of the one already running (on Windows it tells you to look in the tray).
 
 ## Installation
 
@@ -231,6 +231,7 @@ crates/
   frugalrgb/                  The executable
     src/main.rs, cli.rs       Command line
     src/gui.rs, ui/app.slint  Window and tray icon (Slint, software renderer)
+    src/tray.rs               Tray icon and its menu
     src/autostart.rs          Start at login
 tools/
   gen_golden.py               Records the transcripts the driver tests replay

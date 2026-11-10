@@ -9,7 +9,7 @@ repository.workspace = true
 [features]
 default = ["gui"]
 # The window and tray icon. Without it the binary is the command line only.
-gui = ["dep:slint", "dep:slint-build"]
+gui = ["dep:slint", "dep:slint-build", "dep:ksni"]
 
 [dependencies]
 frugalrgb-core = { path = "../frugalrgb-core" }
@@ -22,10 +22,16 @@ slint = { version = "1.18", optional = true, default-features = false, features 
     "backend-winit",
     "renderer-software",
     "system-tray",
+    # For handing a tray click's activation token to the window it opens
+    "unstable-winit-030",
 ] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+# The tray icon on Linux; the same crate and features Slint uses itself
+[target.'cfg(target_os = "linux")'.dependencies]
+ksni = { version = "0.3.7", optional = true, default-features = false, features = ["async-io", "blocking"] }
 
 [build-dependencies]
 slint-build = { version = "1.18", optional = true }

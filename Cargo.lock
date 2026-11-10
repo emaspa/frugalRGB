@@ -1148,6 +1148,7 @@ name = "frugalrgb"
 version = "0.4.0"
 dependencies = [
  "frugalrgb-core",
+ "ksni",
  "libc",
  "log",
  "slint",
@@ -3779,6 +3780,7 @@ dependencies = [
  "const-field-offset",
  "i-slint-backend-linuxkms",
  "i-slint-backend-selector",
+ "i-slint-backend-winit",
  "i-slint-common",
  "i-slint-core",
  "i-slint-core-macros",

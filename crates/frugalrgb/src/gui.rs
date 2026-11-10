@@ -14,6 +14,7 @@ use frugalrgb_core::transport::SharedBus;
 use frugalrgb_core::worker::{Command, Event, Worker};
 use frugalrgb_core::{detect, diagnostics, Correction, DeviceInfo, Mode, Rgb};
 
+use crate::tray::TrayIcon;
 use crate::{autostart, logging};
 use slint::{Color, ComponentHandle, Model, ModelRc, Rgba8Pixel, SharedPixelBuffer, SharedString, VecModel};
 
@@ -58,9 +59,9 @@ fn parse_color(text: &str) -> Option<Rgb> {
     <[u8; 3]>::try_from(parts).ok()
 }
 
-/// The app icon: red, green and blue discs that mix where they overlap, on
-/// a transparent background.
-fn app_icon(size: u32) -> slint::Image {
+/// The app icon as RGBA pixels: red, green and blue discs that mix where
+/// they overlap, on a transparent background.
+fn icon_rgba(size: u32) -> Vec<u8> {
     let s = size as f32;
     let (cx, cy) = (s / 2.0, s / 2.0);
     let radius = s * 0.32;
@@ -72,9 +73,9 @@ fn app_icon(size: u32) -> slint::Image {
     ];
     let glow = s / 10.0;
 
-    let mut buffer = SharedPixelBuffer::<Rgba8Pixel>::new(size, size);
-    for (i, pixel) in buffer.make_mut_slice().iter_mut().enumerate() {
-        let (x, y) = ((i as u32 % size) as f32 + 0.5, (i as u32 / size) as f32 + 0.5);
+    let mut pixels = Vec::with_capacity((size * size * 4) as usize);
+    for i in 0..size * size {
+        let (x, y) = ((i % size) as f32 + 0.5, (i / size) as f32 + 0.5);
         let channel = |(ox, oy): (f32, f32)| {
             let distance = ((x - ox).powi(2) + (y - oy).powi(2)).sqrt();
             let disc = (radius - distance + 0.5).clamp(0.0, 1.0);
@@ -84,9 +85,13 @@ fn app_icon(size: u32) -> slint::Image {
         let (r, g, b) = (channel(centers[0]), channel(centers[1]), channel(centers[2]));
         // Black is where nothing is drawn: make it transparent
         let alpha = (0.299 * f32::from(r) + 0.587 * f32::from(g) + 0.114 * f32::from(b)) as u8;
-        *pixel = Rgba8Pixel { r, g, b, a: alpha.max(r.max(g).max(b) / 2) };
+        pixels.extend([r, g, b, alpha.max(r.max(g).max(b) / 2)]);
     }
-    slint::Image::from_rgba8(buffer)
+    pixels
+}
+
+fn app_icon(size: u32) -> slint::Image {
+    slint::Image::from_rgba8(SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(&icon_rgba(size), size, size))
 }
 
 /// Only one frugalRGB may drive the devices. `None` means another one holds
@@ -101,6 +106,93 @@ fn single_instance_lock() -> Result<Option<File>, String> {
         .open(&path)
         .map_err(|e| format!("{}: {e}", path.display()))?;
     Ok(file.try_lock().is_ok().then_some(file))
+}
+
+/// Settings that have to be in place before the first window exists.
+#[cfg(target_os = "linux")]
+fn prepare_backend() {
+    use slint::winit_030::winit::platform::startup_notify::WindowAttributesExtStartupNotify;
+    use slint::winit_030::winit::window::ActivationToken;
+
+    // Every window opened by a tray click takes that click's token along
+    let selected = slint::BackendSelector::new()
+        .with_winit_window_attributes_hook(|attributes| match crate::tray::take_activation_token() {
+            Some(token) => attributes.with_activation_token(ActivationToken::from_raw(token)),
+            None => attributes,
+        })
+        .select();
+    if let Err(e) = selected {
+        log::warn!("{e}");
+    }
+
+    // The desktop finds the icon and the launcher entry through this id:
+    // it is the name of the installed frugalrgb.desktop
+    if let Err(e) = slint::set_xdg_app_id("frugalrgb") {
+        log::warn!("{e}");
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn prepare_backend() {}
+
+/// Put the window in front of the user, whatever state it is in.
+pub(crate) fn bring_up(window: &MainWindow) {
+    log::debug!("show window (visible: {})", window.window().is_visible());
+    // A program cannot raise a window it already has: Wayland only lets a
+    // new window come to the front, and only with the token of the click
+    // that asked for it. So whatever exists is closed first, whether it is
+    // minimized, buried under other windows or was never put on screen. The
+    // show-then-hide makes Slint give up the window in all three cases.
+    #[cfg(target_os = "linux")]
+    {
+        let _ = window.show();
+        let _ = window.hide();
+    }
+    window.window().set_minimized(false);
+    if let Err(e) = window.show() {
+        log::error!("Could not show the window: {e}");
+    }
+}
+
+/// Where a second copy asks the running one to show its window.
+#[cfg(unix)]
+fn wake_socket() -> std::path::PathBuf {
+    std::env::temp_dir().join("frugalrgb.sock")
+}
+
+/// Starting frugalRGB again while it runs should bring its window up, the
+/// way clicking the tray icon does. The running copy waits for that here.
+#[cfg(unix)]
+fn listen_for_second_launch(window: slint::Weak<MainWindow>) {
+    let path = wake_socket();
+    let _ = std::fs::remove_file(&path);
+    let listener = match std::os::unix::net::UnixListener::bind(&path) {
+        Ok(listener) => listener,
+        Err(e) => return log::warn!("{}: {e}", path.display()),
+    };
+    let waiting = std::thread::Builder::new().name("frugalrgb-wake".into()).spawn(move || {
+        for _knock in listener.incoming().flatten() {
+            let _ = window.upgrade_in_event_loop(|window| bring_up(&window));
+        }
+    });
+    if let Err(e) = waiting {
+        log::warn!("Cannot wait for a second launch: {e}");
+    }
+}
+
+#[cfg(not(unix))]
+fn listen_for_second_launch(_window: slint::Weak<MainWindow>) {}
+
+/// Ask the running copy to show its window. False when it cannot be reached.
+fn wake_running_instance() -> bool {
+    #[cfg(unix)]
+    {
+        std::os::unix::net::UnixStream::connect(wake_socket()).is_ok()
+    }
+    #[cfg(not(unix))]
+    {
+        false
+    }
 }
 
 /// Show a message in a small window of its own and wait for the user.
@@ -120,7 +212,7 @@ fn notice(message: &str) -> Result<(), String> {
 
 struct App {
     window: slint::Weak<MainWindow>,
-    tray: Option<Tray>,
+    tray: Option<TrayIcon>,
     devices: Vec<DeviceInfo>,
     /// What each device says about itself (firmware, address, ...).
     facts: Vec<Vec<(&'static str, String)>>,
@@ -251,7 +343,7 @@ impl App {
         window.set_presets(strings(names.iter().copied()));
         window.set_startup_index(startup.map_or(0, |i| i as i32 + 1));
         if let Some(tray) = &self.tray {
-            tray.set_presets(strings(self.presets.keys().map(String::as_str)));
+            tray.set_presets(self.presets.keys().cloned().collect());
         }
     }
 
@@ -466,7 +558,11 @@ fn describe(event: Event) -> String {
 
 /// Open the window (or just the tray icon) and run until the user quits.
 pub fn run() -> Result<(), String> {
+    prepare_backend();
     let Some(_lock) = single_instance_lock()? else {
+        if wake_running_instance() {
+            return Ok(());
+        }
         return notice("frugalRGB is already running. Look for its icon in the system tray.");
     };
     let fail = |e: slint::PlatformError| e.to_string();
@@ -538,11 +634,8 @@ pub fn run() -> Result<(), String> {
         let _ = status_target.upgrade_in_event_loop(move |window| window.set_status(text.into()));
     });
 
-    let tray = match Tray::new() {
-        Ok(tray) => {
-            tray.set_tray_icon(app_icon(64));
-            Some(tray)
-        }
+    let tray = match TrayIcon::new(window.as_weak(), icon_rgba(64), 64) {
+        Ok(tray) => Some(tray),
         Err(e) => {
             log::warn!("No tray icon: {e}");
             None
@@ -613,6 +706,7 @@ pub fn run() -> Result<(), String> {
     on!(on_diagnostics, |app| app.diagnostics());
     on!(on_test_device_changed, |app| app.show_test_device());
     on!(on_run_test, |app| app.run_test());
+    on!(on_quit_requested, |app| app.quit());
     on!(on_start_at_login_toggled, |app, enabled| {
         if let Err(e) = autostart::set(enabled) {
             app.status(format!("Could not change the autostart entry: {e}"));
@@ -633,27 +727,7 @@ pub fn run() -> Result<(), String> {
         });
     }
 
-    // -- Tray callbacks --
-    if let Some(tray) = &app.borrow().tray {
-        let weak = window.as_weak();
-        tray.on_show_window(move || {
-            if let Some(window) = weak.upgrade() {
-                if let Err(e) = window.show() {
-                    log::error!("Could not show the window: {e}");
-                }
-                // A window that starts hidden already exists on Wayland and
-                // has used up the one redraw it got when it was created.
-                // Without a frame the compositor never puts it on screen.
-                window.window().request_redraw();
-            }
-        });
-        let shared = Rc::clone(&app);
-        tray.on_load_preset(move |name| shared.borrow().select_preset(&name));
-        let shared = Rc::clone(&app);
-        tray.on_leds_off(move || shared.borrow().send(Command::Off));
-        let shared = Rc::clone(&app);
-        tray.on_quit(move || shared.borrow_mut().quit());
-    }
+    listen_for_second_launch(window.as_weak());
 
     // -- Initial state --
     let start_hidden = {
@@ -673,7 +747,8 @@ pub fn run() -> Result<(), String> {
     if !start_hidden {
         window.show().map_err(fail)?;
     }
-    slint::run_event_loop().map_err(fail)?;
+    // The tray icon keeps the program alive while no window is open
+    slint::run_event_loop_until_quit().map_err(fail)?;
 
     // The loop can also end without quit(), e.g. the session going away
     app.borrow_mut().quit();

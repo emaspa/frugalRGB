@@ -289,6 +289,9 @@ export component MainWindow inherits Window {
     callback test-device-changed();
     callback run-test();
 
+    // The tray's Quit entry.
+    callback quit-requested();
+
     VerticalLayout {
         padding: 14px;
         spacing: 12px;
