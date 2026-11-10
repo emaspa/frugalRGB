@@ -20,6 +20,35 @@ use slint::{Color, ComponentHandle, Model, ModelRc, Rgba8Pixel, SharedPixelBuffe
 
 slint::include_modules!();
 
+/// The pages the About box opens, in the order of its rows.
+const LINKS: [&str; 3] =
+    ["https://github.com/emaspa/frugalRGB", "https://buymeacoffee.com/emaspa", "https://ko-fi.com/emaspa"];
+
+/// Hand one of [`LINKS`] to the desktop's browser.
+fn open_link(index: i32) {
+    let Some(url) = usize::try_from(index).ok().and_then(|i| LINKS.get(i)) else { return };
+    #[cfg(windows)]
+    let opener = {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let mut command = std::process::Command::new("rundll32");
+        command.args(["url.dll,FileProtocolHandler", url]).creation_flags(CREATE_NO_WINDOW);
+        command
+    };
+    #[cfg(not(windows))]
+    let opener = {
+        let mut command = std::process::Command::new(if cfg!(target_os = "macos") { "open" } else { "xdg-open" });
+        command.arg(url);
+        command
+    };
+    let mut opener = opener;
+    match opener.spawn() {
+        // Collect the helper when it is done, without waiting for it here
+        Ok(mut child) => drop(std::thread::spawn(move || child.wait())),
+        Err(e) => log::warn!("Could not open {url}: {e}"),
+    }
+}
+
 /// Effect names as shown, in menu order.
 const EFFECTS: [(&str, Mode); 6] = [
     ("Static", Mode::Static),
@@ -707,6 +736,7 @@ pub fn run() -> Result<(), String> {
     on!(on_test_device_changed, |app| app.show_test_device());
     on!(on_run_test, |app| app.run_test());
     on!(on_quit_requested, |app| app.quit());
+    window.on_open_link(open_link);
     on!(on_start_at_login_toggled, |app, enabled| {
         if let Err(e) = autostart::set(enabled) {
             app.status(format!("Could not change the autostart entry: {e}"));
