@@ -11,7 +11,7 @@ depends=('gcc-libs' 'glibc' 'fontconfig' 'systemd-libs' 'libxkbcommon' 'wayland'
 makedepends=('cargo')
 install=frugalrgb.install
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('07df4317099bd2de249831907d2c04a2dabcb460d10f8d041c2da13e303b7145')
 
 # The same flags for build and check, or check compiles everything again.
 # The remap keeps the build directory out of the binary.
