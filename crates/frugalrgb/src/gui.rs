@@ -183,6 +183,31 @@ pub(crate) fn bring_up(window: &MainWindow) {
     }
 }
 
+/// Slint gives every window a native one as soon as the event loop starts,
+/// shown or not. Wayland has no hidden windows, so starting in the tray left
+/// one that was never mapped, and Plasma listed it in the task manager as an
+/// entry nobody could close. Once it exists, show-then-hide makes Slint
+/// destroy it. Nothing is drawn in between, so it never reaches the screen.
+#[cfg(target_os = "linux")]
+fn release_hidden_window(window: &MainWindow) {
+    use slint::winit_030::WinitWindowAccessor;
+
+    let window = window.clone_strong();
+    let release = slint::spawn_local(async move {
+        if window.window().winit_window().await.is_ok() && !window.window().is_visible() {
+            log::debug!("releasing the native window of the hidden start");
+            let _ = window.show();
+            let _ = window.hide();
+        }
+    });
+    if let Err(e) = release {
+        log::warn!("{e}");
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn release_hidden_window(_window: &MainWindow) {}
+
 /// Where a second copy asks the running one to show its window.
 #[cfg(unix)]
 fn wake_socket() -> std::path::PathBuf {
@@ -774,7 +799,9 @@ pub fn run() -> Result<(), String> {
     #[cfg(debug_assertions)]
     let _snapshot_timer = snapshot_for_development(&window, &app);
 
-    if !start_hidden {
+    if start_hidden {
+        release_hidden_window(&window);
+    } else {
         window.show().map_err(fail)?;
     }
     // The tray icon keeps the program alive while no window is open

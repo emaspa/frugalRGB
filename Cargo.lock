@@ -1145,7 +1145,7 @@ dependencies = [
 
 [[package]]
 name = "frugalrgb"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "frugalrgb-core",
  "ksni",
@@ -1158,7 +1158,7 @@ dependencies = [
 
 [[package]]
 name = "frugalrgb-core"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "hidapi",
  "indexmap",
