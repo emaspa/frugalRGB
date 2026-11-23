@@ -295,9 +295,13 @@ mod platform {
         u16::from_str_radix(text.trim().trim_start_matches("0x"), 16).ok()
     }
 
-    /// The ENE chip of an ASUS graphics card, reached through the I2C
+    /// The ENE chips of every ASUS graphics card, reached through the I2C
     /// adapters the NVIDIA driver exposes.
-    pub fn detect_asus_gpu() -> Option<Box<dyn Controller>> {
+    pub fn detect_asus_gpu() -> Vec<Box<dyn Controller>> {
+        let mut found: Vec<Box<dyn Controller>> = Vec::new();
+        // PCI devices that already have a controller: each card exposes
+        // several adapters, only one of them carries the RGB chip
+        let mut claimed: Vec<std::path::PathBuf> = Vec::new();
         for adapter in adapters() {
             if !adapter.name.starts_with("NVIDIA i2c adapter") {
                 continue;
@@ -307,6 +311,9 @@ mod platform {
             else {
                 continue;
             };
+            if claimed.contains(&pci) {
+                continue;
+            }
             let (Some(vendor), Some(device)) =
                 (read_hex(pci.join("subsystem_vendor")), read_hex(pci.join("subsystem_device")))
             else {
@@ -336,11 +343,14 @@ mod platform {
 
             let shared: SharedBus = Arc::new(Mutex::new(bus));
             match EneV2::gpu(shared, &label) {
-                Ok(ctrl) => return Some(Box::new(ctrl)),
+                Ok(ctrl) => {
+                    found.push(Box::new(ctrl));
+                    claimed.push(pci);
+                }
                 Err(e) => log::debug!("ASUS GPU RGB on i2c-{} rejected: {e}", adapter.number),
             }
         }
-        None
+        found
     }
 
     /// The chipset SMBus, where the memory sits.
@@ -379,20 +389,21 @@ mod platform {
     /// The I2C port of an NVIDIA card that ASUS wires the RGB chip to.
     const RGB_PORT: u8 = 1;
 
-    /// The ENE chip of an ASUS graphics card, reached through NvAPI.
-    pub fn detect_asus_gpu() -> Option<Box<dyn Controller>> {
+    /// The ENE chips of every ASUS graphics card, reached through NvAPI.
+    pub fn detect_asus_gpu() -> Vec<Box<dyn Controller>> {
+        let mut found: Vec<Box<dyn Controller>> = Vec::new();
         let api = match NvApi::open() {
             Ok(api) => api,
             Err(e) => {
                 log::debug!("NvAPI unavailable: {e}");
-                return None;
+                return found;
             }
         };
         let gpus = match api.gpus() {
             Ok(gpus) => gpus,
             Err(e) => {
                 log::debug!("{e}");
-                return None;
+                return found;
             }
         };
 
@@ -414,11 +425,11 @@ mod platform {
 
             let shared: SharedBus = Arc::new(Mutex::new(bus));
             match EneV2::gpu(shared, &card_label(gpu.subsystem_device, &gpu.name)) {
-                Ok(ctrl) => return Some(Box::new(ctrl)),
+                Ok(ctrl) => found.push(Box::new(ctrl)),
                 Err(e) => log::debug!("ASUS GPU RGB on {} rejected: {e}", gpu.name),
             }
         }
-        None
+        found
     }
 
     /// The chipset SMBus, where the memory sits. Needs PawnIO and an
