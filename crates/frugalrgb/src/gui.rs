@@ -144,12 +144,22 @@ fn prepare_backend() {
     use slint::winit_030::winit::window::ActivationToken;
 
     // Every window opened by a tray click takes that click's token along
-    let selected = slint::BackendSelector::new()
-        .with_winit_window_attributes_hook(|attributes| match crate::tray::take_activation_token() {
+    let mut selector = slint::BackendSelector::new().with_winit_window_attributes_hook(|attributes| {
+        match crate::tray::take_activation_token() {
             Some(token) => attributes.with_activation_token(ActivationToken::from_raw(token)),
             None => attributes,
-        })
-        .select();
+        }
+    });
+    if prefer_x11() {
+        use slint::winit_030::winit::event_loop::EventLoop;
+        use slint::winit_030::winit::platform::x11::EventLoopBuilderExtX11;
+
+        log::debug!("GNOME: using X11, so the titlebar is the desktop's own");
+        let mut builder = EventLoop::<slint::winit_030::SlintEvent>::with_user_event();
+        builder.with_x11();
+        selector = selector.with_winit_event_loop_builder(builder);
+    }
+    let selected = selector.select();
     if let Err(e) = selected {
         log::warn!("{e}");
     }
@@ -159,6 +169,18 @@ fn prepare_backend() {
     if let Err(e) = slint::set_xdg_app_id("frugalrgb") {
         log::warn!("{e}");
     }
+}
+
+/// GNOME gives Wayland windows no titlebar (no server-side decorations), so
+/// winit draws its own, which ignores the desktop theme and button layout.
+/// Through XWayland the window gets GNOME's real titlebar instead.
+/// `FRUGALRGB_WAYLAND=1` keeps native Wayland.
+#[cfg(target_os = "linux")]
+fn prefer_x11() -> bool {
+    let set = |name: &str| std::env::var_os(name).is_some_and(|v| !v.is_empty());
+    let gnome = std::env::var("XDG_CURRENT_DESKTOP")
+        .is_ok_and(|desktops| desktops.split(':').any(|d| d.eq_ignore_ascii_case("GNOME")));
+    gnome && set("WAYLAND_DISPLAY") && set("DISPLAY") && !set("FRUGALRGB_WAYLAND")
 }
 
 #[cfg(not(target_os = "linux"))]
