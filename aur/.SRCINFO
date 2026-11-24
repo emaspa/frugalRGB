@@ -19,6 +19,6 @@ pkgbase = frugalrgb
 	depends = libxi
 	depends = libxrandr
 	source = frugalrgb-0.5.3.tar.gz::https://github.com/emaspa/frugalRGB/archive/refs/tags/v0.5.3.tar.gz
-	sha256sums = SKIP
+	sha256sums = d52197a61db41542053eb52cc6627bc7fd3eb599cf90f760e3ab70c67fc71a99
 
 pkgname = frugalrgb
